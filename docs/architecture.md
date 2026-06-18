@@ -47,22 +47,25 @@ A single declarative catalog describes every management action: its argv templat
 it mutates state, and the parser for its output. This keeps both clients' feature sets
 identical and makes adding a command a one-liner.
 
-| Action            | Command (default)            | Parser           |
-|-------------------|------------------------------|------------------|
-| `version`         | `surge --version`            | text             |
-| `status`          | `surge status --json`        | JSON → Status    |
-| `start`           | `surge start`                | exit-code        |
-| `stop`            | `surge stop`                 | exit-code        |
-| `restart`         | `surge restart`              | exit-code        |
-| `reload`          | `surge reload`               | exit-code        |
-| `policies`        | `surge policy list --json`   | JSON → Policy[]  |
-| `selectPolicy`    | `surge policy select <g> <p>`| exit-code        |
-| `rules`           | `surge rule list --json`     | JSON → Rule[]    |
-| `traffic`         | `surge traffic --json`       | JSON → Traffic   |
-| `logsTail`        | `surge log --follow`         | stream lines     |
-| `configPath`      | `surge config path`          | text             |
-| `configShow`      | `surge config show`          | text             |
-| `test`            | `surge test <policy>`        | text (latency)   |
+| Action            | Command (default)             | Parser           |
+|-------------------|-------------------------------|------------------|
+| `version`         | `surge --version`             | text             |
+| `status`          | `surge --raw status`          | JSON → Status    |
+| `start`           | `surge start`                 | exit-code        |
+| `stop`            | `surge stop`                  | exit-code        |
+| `restart`         | `surge restart`               | exit-code        |
+| `reload`          | `surge reload`                | exit-code        |
+| `policies`        | `surge --raw policy list`     | JSON → Policy[]  |
+| `selectPolicy`    | `surge policy select <g> <p>` | exit-code        |
+| `rules`           | `surge --raw rule list`       | JSON → Rule[]    |
+| `traffic`         | `surge --raw traffic`         | JSON → Traffic   |
+| `logsTail`        | `surge log --follow`          | stream lines     |
+| `configPath`      | `surge config path`           | text             |
+| `configShow`      | `surge config show`           | text             |
+| `test`            | `surge test <policy>`         | text (latency)   |
+
+> `--raw` is a global flag (placed right after the binary) that makes `surge` emit
+> machine-readable output for the query commands; the parsers in `parsers.ts` consume it.
 
 > The `surge` binary name, path, and per-command argv are **configurable per connection**
 > (`SurgeProfile`) so the catalog adapts to forks/wrappers or a non-standard install.

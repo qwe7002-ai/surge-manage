@@ -7,7 +7,7 @@ import type { SurgeProfile } from "../dist/types.js";
 const profile: SurgeProfile = { bin: "surge" };
 
 test("buildCommandLine fills placeholders and quotes", () => {
-  assert.equal(buildCommandLine(profile, "status"), "surge status --json");
+  assert.equal(buildCommandLine(profile, "status"), "surge --raw status");
   assert.equal(
     buildCommandLine(profile, "selectPolicy", ["Proxy Group", "🇯🇵 Tokyo"]),
     "surge policy select 'Proxy Group' '🇯🇵 Tokyo'",

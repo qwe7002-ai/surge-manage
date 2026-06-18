@@ -22,7 +22,7 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
   SurgeAction.version:
       CommandSpec(action: SurgeAction.version, argv: ['--version'], mutates: false, arity: 0),
   SurgeAction.status:
-      CommandSpec(action: SurgeAction.status, argv: ['status', '--json'], mutates: false, arity: 0),
+      CommandSpec(action: SurgeAction.status, argv: ['--raw', 'status'], mutates: false, arity: 0),
   SurgeAction.start:
       CommandSpec(action: SurgeAction.start, argv: ['start'], mutates: true, arity: 0),
   SurgeAction.stop:
@@ -32,16 +32,16 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
   SurgeAction.reload:
       CommandSpec(action: SurgeAction.reload, argv: ['reload'], mutates: true, arity: 0),
   SurgeAction.policies: CommandSpec(
-      action: SurgeAction.policies, argv: ['policy', 'list', '--json'], mutates: false, arity: 0),
+      action: SurgeAction.policies, argv: ['--raw', 'policy', 'list'], mutates: false, arity: 0),
   SurgeAction.selectPolicy: CommandSpec(
       action: SurgeAction.selectPolicy,
       argv: ['policy', 'select', '{0}', '{1}'],
       mutates: true,
       arity: 2),
   SurgeAction.rules: CommandSpec(
-      action: SurgeAction.rules, argv: ['rule', 'list', '--json'], mutates: false, arity: 0),
+      action: SurgeAction.rules, argv: ['--raw', 'rule', 'list'], mutates: false, arity: 0),
   SurgeAction.traffic:
-      CommandSpec(action: SurgeAction.traffic, argv: ['traffic', '--json'], mutates: false, arity: 0),
+      CommandSpec(action: SurgeAction.traffic, argv: ['--raw', 'traffic'], mutates: false, arity: 0),
   SurgeAction.logsTail: CommandSpec(
       action: SurgeAction.logsTail,
       argv: ['log', '--follow'],

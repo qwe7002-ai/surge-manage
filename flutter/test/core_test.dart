@@ -7,7 +7,7 @@ const profile = SurgeProfile();
 
 void main() {
   test('buildCommandLine fills placeholders and quotes', () {
-    expect(buildCommandLine(profile, SurgeAction.status), 'surge status --json');
+    expect(buildCommandLine(profile, SurgeAction.status), 'surge --raw status');
     expect(
       buildCommandLine(profile, SurgeAction.selectPolicy, ['Proxy Group', 'Tokyo 01']),
       "surge policy select 'Proxy Group' 'Tokyo 01'",
