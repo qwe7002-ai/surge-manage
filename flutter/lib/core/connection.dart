@@ -46,6 +46,16 @@ class ConnectionManager {
     }
   }
 
+  /// List `*.conf` profiles in the host's configured config directory.
+  Future<List<String>> listProfiles() async {
+    final client = _client;
+    final dir = _host.configDir;
+    if (client == null) throw StateError('Not connected');
+    if (dir == null || dir.isEmpty) return const [];
+    final res = await exec(client, buildListProfilesCommand(dir));
+    return parseProfiles(res.stdout);
+  }
+
   Future<CommandResult> run(SurgeAction action, [List<String> args = const []]) async {
     final client = _client;
     if (client == null) throw StateError('Not connected');

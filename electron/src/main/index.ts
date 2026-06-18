@@ -68,6 +68,8 @@ function registerIpc(): void {
     (_e, action: SurgeAction, args: string[] = []) => connection.run(action, args),
   );
 
+  ipcMain.handle(IPC.profilesList, () => connection.listProfiles());
+
   ipcMain.handle(IPC.logsStart, () => connection.startLogs());
   ipcMain.handle(IPC.logsStop, () => connection.stopLogs());
 }

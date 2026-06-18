@@ -93,7 +93,8 @@ The catalog is defined once in `packages/shared/src/commands.ts` and mirrored in
 
 Core entities (see `packages/shared/src/types.ts`):
 
-- **HostConfig** — id, label, host, port, username, auth method, surge profile.
+- **HostConfig** — id, label, host, port, username, auth method, surge profile, and an
+  optional `configDir` (Surge's profile directory on the remote, used to list/switch profiles).
 - **SurgeProfile** — binary path + argv overrides for the command catalog.
 - **ConnectionState** — `disconnected | connecting | connected | error`.
 - **Environment / PolicyDump / PolicyTest / Rule / ActiveConnection / Traffic / LogLine** —
@@ -125,9 +126,18 @@ window.surge.connection.connect(hostId)
 window.surge.connection.disconnect()
 window.surge.connection.onState(cb)             // ConnectionState changes
 window.surge.surge.run(action, args?)           // structured command → CommandResult
-window.surge.logs.start() / stop()              // begin/end parsed log streaming
+window.surge.profiles.list()                    // *.conf names in configDir (via ls)
+window.surge.logs.start() / stop()              // begin/end parsed request streaming
 window.surge.logs.onLine(cb)                    // parsed LogLine events
 ```
+
+### Feature coverage
+
+Beyond inspection, the UI drives Surge's mutating commands: outbound mode
+(`set ProxyMode`), policy-group selection (`set ProxyGroupSelection.<g>=<p>`), feature
+toggles (`set MitMEnabled|RewriteEnabled|ScriptingEnabled|Replica`), live connection
+killing (`kill <id>` from the Connections tab), profile switching (`switch-profile`, with
+the candidate list read from `configDir`), DNS flush, diagnostics, and log-level changes.
 
 All channels are defined in `packages/shared/src/ipc.ts` and validated on both ends. The
 SSH connection lives entirely in the main process (`electron/src/main/`).

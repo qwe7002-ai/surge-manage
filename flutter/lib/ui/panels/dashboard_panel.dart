@@ -44,6 +44,44 @@ class DashboardPanel extends StatelessWidget {
             ],
           ),
         ),
+        if (state.profiles.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          FCard(
+            title: const Text('Profiles'),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in state.profiles)
+                  FButton(
+                    style: FButtonStyle.outline,
+                    onPress: state.busy ? null : () => state.switchProfile(p),
+                    label: Text(p),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        FCard(
+          title: const Text('Features'),
+          child: Column(
+            children: [
+              for (final t in featureToggles)
+                Row(
+                  children: [
+                    Expanded(child: Text(t.label)),
+                    Switch(
+                      value: isToggleOn(env?.fields[t.key]),
+                      onChanged: state.busy
+                          ? null
+                          : (on) => state.setToggle(t.key, on),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
         const SizedBox(height: 12),
         FCard(
           title: const Text('Control'),

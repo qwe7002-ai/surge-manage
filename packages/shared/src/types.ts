@@ -23,6 +23,11 @@ export interface HostConfig {
   secretRef?: string;
   /** Overrides for how the `surge` binary is invoked on this host. */
   surge: SurgeProfile;
+  /**
+   * Absolute path to Surge's config/profile directory on the remote host
+   * (where `*.conf` profiles live). Enables listing/switching profiles.
+   */
+  configDir?: string;
   createdAt: number;
   lastConnectedAt?: number;
 }
@@ -122,6 +127,22 @@ export const PROXY_MODES = [
   { value: 1, label: "Global" },
   { value: 2, label: "Rule" },
 ] as const;
+
+/**
+ * Boolean environment switches that can be toggled with
+ * `set <Key>=0|1`. Current state is read from the environment dictionary.
+ */
+export const FEATURE_TOGGLES = [
+  { key: "MitMEnabled", label: "MitM" },
+  { key: "RewriteEnabled", label: "Rewrite" },
+  { key: "ScriptingEnabled", label: "Scripting" },
+  { key: "Replica", label: "HTTP Capture" },
+] as const;
+
+/** True when an environment field holds a truthy boolean ("1"/"true"). */
+export function isToggleOn(value: string | undefined): boolean {
+  return value === "1" || value === "true";
+}
 
 /**
  * One proxy's result from `surge --raw test-all-policies` /

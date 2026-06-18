@@ -1,5 +1,12 @@
 import { useEffect } from "react";
-import { Activity, FileText, ListTree, Network, ScrollText } from "lucide-react";
+import {
+  Activity,
+  FileText,
+  ListTree,
+  Network,
+  Plug,
+  ScrollText,
+} from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/Sidebar";
@@ -7,6 +14,7 @@ import { StatusBar } from "@/components/StatusBar";
 import { DashboardPanel } from "@/components/panels/DashboardPanel";
 import { PoliciesPanel } from "@/components/panels/PoliciesPanel";
 import { RulesPanel } from "@/components/panels/RulesPanel";
+import { ConnectionsPanel } from "@/components/panels/ConnectionsPanel";
 import { LogsPanel } from "@/components/panels/LogsPanel";
 import { ConfigPanel } from "@/components/panels/ConfigPanel";
 import { useApp } from "@/store/app-store";
@@ -46,6 +54,9 @@ export default function App() {
                   <TabsTrigger value="rules" disabled={!connected}>
                     <ListTree /> Rules
                   </TabsTrigger>
+                  <TabsTrigger value="connections" disabled={!connected}>
+                    <Plug /> Connections
+                  </TabsTrigger>
                   <TabsTrigger value="logs" disabled={!connected}>
                     <ScrollText /> Requests
                   </TabsTrigger>
@@ -64,6 +75,9 @@ export default function App() {
                 </TabsContent>
                 <TabsContent value="rules" className="mt-0">
                   <RulesPanel />
+                </TabsContent>
+                <TabsContent value="connections" className="mt-0 h-full">
+                  <ConnectionsPanel />
                 </TabsContent>
                 <TabsContent value="logs" className="mt-0 h-full">
                   <LogsPanel />

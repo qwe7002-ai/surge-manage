@@ -6,6 +6,7 @@ import '../core/types.dart';
 import '../state/app_state.dart';
 import 'host_list.dart';
 import 'panels/config_panel.dart';
+import 'panels/connections_panel.dart';
 import 'panels/dashboard_panel.dart';
 import 'panels/logs_panel.dart';
 import 'panels/policies_panel.dart';
@@ -49,6 +50,7 @@ class _ManageView extends StatelessWidget {
               FTabEntry(label: Text('Dashboard'), child: DashboardPanel()),
               FTabEntry(label: Text('Policies'), child: PoliciesPanel()),
               FTabEntry(label: Text('Rules'), child: RulesPanel()),
+              FTabEntry(label: Text('Connections'), child: ConnectionsPanel()),
               FTabEntry(label: Text('Requests'), child: LogsPanel()),
               FTabEntry(label: Text('Config'), child: ConfigPanel()),
             ],

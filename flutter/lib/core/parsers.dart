@@ -22,6 +22,18 @@ String? _str(dynamic v) => v is String ? v : null;
 /// Surge may wrap payloads as {result, error, <payload>}. Unwrap by key.
 dynamic _unwrap(Map outer, String key) => outer.containsKey(key) ? outer[key] : outer;
 
+/// Parse `ls -1` of the config dir into profile names (`*.conf`, sans extension).
+List<String> parseProfiles(String stdout) {
+  final out = stdout
+      .split(RegExp(r'\r?\n'))
+      .map((l) => l.trim())
+      .where((l) => l.endsWith('.conf'))
+      .map((l) => l.replaceFirst(RegExp(r'\.conf$'), ''))
+      .toList()
+    ..sort();
+  return out;
+}
+
 /// Surface a Surge `error` field from a --raw response, if any.
 String? extractError(String stdout) {
   final json = _tryJson(stdout);

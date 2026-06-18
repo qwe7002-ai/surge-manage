@@ -85,6 +85,10 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       action: SurgeAction.setEnvironment, argv: ['set', '{0}'], mutates: true, arity: 1),
 };
 
+/// List profile files in the configured Surge config directory (plain `ls`).
+String buildListProfilesCommand(String configDir) =>
+    'ls -1 -- ${shellQuote(configDir)}';
+
 final RegExp _placeholder = RegExp(r'^\{(\d+)\}$');
 final RegExp _safeToken = RegExp(r'^[A-Za-z0-9_./:=-]+$');
 

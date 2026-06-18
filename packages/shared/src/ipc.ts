@@ -24,6 +24,7 @@ export const IPC = {
   connDisconnect: "conn:disconnect",
   connState: "conn:state", // main → renderer event
   surgeRun: "surge:run",
+  profilesList: "profiles:list",
   logsStart: "logs:start",
   logsStop: "logs:stop",
   logLine: "log:line", // main → renderer event (parsed streaming surge logs)
@@ -44,6 +45,10 @@ export interface SurgeBridge {
   };
   surge: {
     run(action: SurgeAction, args?: string[]): Promise<CommandResult>;
+  };
+  profiles: {
+    /** List `*.conf` profile names in the host's configured config directory. */
+    list(): Promise<string[]>;
   };
   logs: {
     /** Begin streaming parsed surge log lines (e.g. when the Logs tab opens). */

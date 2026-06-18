@@ -21,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROXY_MODES } from "@surge-manage/shared";
+import { FEATURE_TOGGLES, isToggleOn, PROXY_MODES } from "@surge-manage/shared";
+import { Switch } from "@/components/ui/switch";
 import { Disconnected } from "@/components/Disconnected";
 import { useApp } from "@/store/app-store";
 import { useInterval } from "@/hooks/use-interval";
@@ -34,10 +35,14 @@ export function DashboardPanel() {
   const traffic = useApp((s) => s.traffic);
   const busy = useApp((s) => s.busy);
   const lastInfo = useApp((s) => s.lastInfo);
+  const profiles = useApp((s) => s.profiles);
   const refreshEnvironment = useApp((s) => s.refreshEnvironment);
   const refreshTraffic = useApp((s) => s.refreshTraffic);
   const runAction = useApp((s) => s.runAction);
   const setProxyMode = useApp((s) => s.setProxyMode);
+  const setToggle = useApp((s) => s.setToggle);
+  const switchProfile = useApp((s) => s.switchProfile);
+  const refreshProfiles = useApp((s) => s.refreshProfiles);
 
   // Live-poll active connections while connected and viewing the dashboard.
   useInterval(() => void refreshTraffic(), connected ? 3000 : null);
@@ -95,6 +100,57 @@ export function DashboardPanel() {
           </CardContent>
         </Card>
       </div>
+
+      {profiles.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-sm font-medium">
+              Profiles
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6"
+                disabled={busy}
+                onClick={() => void refreshProfiles()}
+              >
+                <RefreshCw />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {profiles.map((p) => (
+              <Button
+                key={p}
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                title="Switch to this profile"
+                onClick={() => void switchProfile(p)}
+              >
+                {p}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">Features</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-x-6 gap-y-3">
+          {FEATURE_TOGGLES.map((t) => (
+            <label key={t.key} className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={isToggleOn(environment?.fields[t.key])}
+                disabled={busy}
+                onCheckedChange={(on) => void setToggle(t.key, on)}
+              />
+              {t.label}
+            </label>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">

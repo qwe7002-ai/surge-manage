@@ -43,6 +43,19 @@ function unwrap(obj: Record<string, unknown>, key: string): unknown {
   return obj;
 }
 
+/**
+ * Parse `ls -1` output of the config directory into profile names: keep only
+ * `*.conf` files and strip the extension (the name `switch-profile` expects).
+ */
+export function parseProfiles(stdout: string): string[] {
+  return stdout
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith(".conf"))
+    .map((l) => l.replace(/\.conf$/, ""))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 /** Surface a Surge `error` field from a --raw response, if any. */
 export function extractError(stdout: string): string | undefined {
   const rec = asRecord(tryJson(stdout));

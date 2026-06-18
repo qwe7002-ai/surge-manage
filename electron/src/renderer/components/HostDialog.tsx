@@ -34,6 +34,7 @@ interface FormState {
   auth: AuthMethod;
   privateKeyPath: string;
   surgeBin: string;
+  configDir: string;
   secret: string;
 }
 
@@ -46,6 +47,7 @@ function emptyForm(): FormState {
     auth: "key",
     privateKeyPath: "",
     surgeBin: "surge-cli",
+    configDir: "",
     secret: "",
   };
 }
@@ -59,6 +61,7 @@ function toForm(host: HostConfig): FormState {
     auth: host.auth,
     privateKeyPath: host.privateKeyPath ?? "",
     surgeBin: host.surge.bin,
+    configDir: host.configDir ?? "",
     secret: "",
   };
 }
@@ -94,6 +97,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
       privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
       secretRef,
       surge: { bin: form.surgeBin.trim() || "surge-cli" },
+      configDir: form.configDir.trim() || undefined,
       createdAt: initial?.createdAt ?? Date.now(),
       lastConnectedAt: initial?.lastConnectedAt,
     };
@@ -195,6 +199,14 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
               value={form.surgeBin}
               placeholder="surge-cli (or /Applications/Surge.app/Contents/Applications/surge-cli)"
               onChange={(e) => set("surgeBin", e.target.value)}
+            />
+          </Field>
+
+          <Field label="Config directory (optional)">
+            <Input
+              value={form.configDir}
+              placeholder="~/Library/Application Support/Surge/Profiles"
+              onChange={(e) => set("configDir", e.target.value)}
             />
           </Field>
         </div>

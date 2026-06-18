@@ -80,6 +80,7 @@ class HostConfig {
     this.privateKeyPath,
     this.secretRef,
     SurgeProfile? surge,
+    this.configDir,
     required this.createdAt,
     this.lastConnectedAt,
   }) : surge = surge ?? const SurgeProfile();
@@ -93,6 +94,7 @@ class HostConfig {
   final String? privateKeyPath;
   final String? secretRef;
   final SurgeProfile surge;
+  final String? configDir;
   final int createdAt;
   final int? lastConnectedAt;
 
@@ -106,6 +108,7 @@ class HostConfig {
         'privateKeyPath': privateKeyPath,
         'secretRef': secretRef,
         'surge': surge.toJson(),
+        'configDir': configDir,
         'createdAt': createdAt,
         'lastConnectedAt': lastConnectedAt,
       };
@@ -125,6 +128,7 @@ class HostConfig {
         surge: j['surge'] == null
             ? const SurgeProfile()
             : SurgeProfile.fromJson((j['surge'] as Map).cast<String, dynamic>()),
+        configDir: j['configDir'] as String?,
         createdAt: j['createdAt'] as int,
         lastConnectedAt: j['lastConnectedAt'] as int?,
       );
@@ -183,6 +187,16 @@ const proxyModes = [
   (value: 1, label: 'Global'),
   (value: 2, label: 'Rule'),
 ];
+
+/// Boolean environment switches togglable with `set <Key>=0|1`.
+const featureToggles = [
+  (key: 'MitMEnabled', label: 'MitM'),
+  (key: 'RewriteEnabled', label: 'Rewrite'),
+  (key: 'ScriptingEnabled', label: 'Scripting'),
+  (key: 'Replica', label: 'HTTP Capture'),
+];
+
+bool isToggleOn(String? value) => value == '1' || value == 'true';
 
 /// From `surge --raw dump policy` → names of proxies and policy groups.
 class PolicyDump {

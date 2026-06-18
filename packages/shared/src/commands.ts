@@ -83,6 +83,14 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   setEnvironment: { action: "setEnvironment", argv: ["set", "{0}"], mutates: true, arity: 1 },
 };
 
+/**
+ * Command to list profile files in the configured Surge config directory.
+ * Not a surge subcommand — a plain `ls` over the same authenticated transport.
+ */
+export function buildListProfilesCommand(configDir: string): string {
+  return `ls -1 -- ${shellQuote(configDir)}`;
+}
+
 /** Shell-quote a single token for safe interpolation into a remote command. */
 export function shellQuote(token: string): string {
   if (token.length > 0 && /^[A-Za-z0-9_./:=-]+$/.test(token)) return token;

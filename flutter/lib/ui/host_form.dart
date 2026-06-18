@@ -21,6 +21,7 @@ class _HostFormState extends State<HostForm> {
   late final TextEditingController _username;
   late final TextEditingController _keyPath;
   late final TextEditingController _surgeBin;
+  late final TextEditingController _configDir;
   late final TextEditingController _secret;
   AuthMethod _auth = AuthMethod.key;
 
@@ -34,13 +35,23 @@ class _HostFormState extends State<HostForm> {
     _username = TextEditingController(text: h?.username ?? 'root');
     _keyPath = TextEditingController(text: h?.privateKeyPath ?? '');
     _surgeBin = TextEditingController(text: h?.surge.bin ?? 'surge-cli');
+    _configDir = TextEditingController(text: h?.configDir ?? '');
     _secret = TextEditingController();
     _auth = h?.auth ?? AuthMethod.key;
   }
 
   @override
   void dispose() {
-    for (final c in [_label, _host, _port, _username, _keyPath, _surgeBin, _secret]) {
+    for (final c in [
+      _label,
+      _host,
+      _port,
+      _username,
+      _keyPath,
+      _surgeBin,
+      _configDir,
+      _secret,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -64,6 +75,7 @@ class _HostFormState extends State<HostForm> {
           _auth == AuthMethod.key && _keyPath.text.trim().isNotEmpty ? _keyPath.text.trim() : null,
       secretRef: secretRef,
       surge: SurgeProfile(bin: _surgeBin.text.trim().isEmpty ? 'surge-cli' : _surgeBin.text.trim()),
+      configDir: _configDir.text.trim().isEmpty ? null : _configDir.text.trim(),
       createdAt: widget.initial?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
       lastConnectedAt: widget.initial?.lastConnectedAt,
     );
@@ -126,6 +138,12 @@ class _HostFormState extends State<HostForm> {
               const SizedBox(height: 12),
             ],
             FTextField(controller: _surgeBin, label: const Text('Surge binary')),
+            const SizedBox(height: 12),
+            FTextField(
+              controller: _configDir,
+              label: const Text('Config directory (optional)'),
+              hint: '~/Library/Application Support/Surge/Profiles',
+            ),
             const SizedBox(height: 20),
             Row(
               children: [

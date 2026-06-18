@@ -34,6 +34,9 @@ const bridge: SurgeBridge = {
     run: (action: SurgeAction, args?: string[]): Promise<CommandResult> =>
       ipcRenderer.invoke(IPC.surgeRun, action, args ?? []),
   },
+  profiles: {
+    list: (): Promise<string[]> => ipcRenderer.invoke(IPC.profilesList),
+  },
   logs: {
     start: () => ipcRenderer.invoke(IPC.logsStart),
     stop: () => ipcRenderer.invoke(IPC.logsStop),

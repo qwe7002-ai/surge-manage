@@ -21,6 +21,8 @@ class AppState extends ChangeNotifier {
   final Map<String, PolicyTest> policyTests = {};
   List<Rule> rules = [];
   Traffic? traffic;
+  List<ActiveConnection> connections = [];
+  List<String> profiles = [];
   final List<LogLine> logs = [];
   bool logStreaming = false;
   bool busy = false;
@@ -94,6 +96,7 @@ class AppState extends ChangeNotifier {
       unawaited(refreshEnvironment());
       unawaited(refreshPolicies());
       unawaited(refreshTraffic());
+      unawaited(refreshProfiles());
       _trafficTimer?.cancel();
       _trafficTimer =
           Timer.periodic(const Duration(seconds: 3), (_) => refreshTraffic());
@@ -107,6 +110,8 @@ class AppState extends ChangeNotifier {
         policyTests.clear();
         rules = [];
         traffic = null;
+        connections = [];
+        profiles = [];
         logStreaming = false;
       }
     }
@@ -175,12 +180,40 @@ class AppState extends ChangeNotifier {
   Future<void> refreshTraffic() async {
     try {
       final r = await _manager!.run(SurgeAction.dumpActive);
-      traffic = aggregateTraffic(parseActive(r.stdout));
+      connections = parseActive(r.stdout);
+      traffic = aggregateTraffic(connections);
       notifyListeners();
     } catch (_) {
       /* best-effort polling */
     }
   }
+
+  Future<void> setToggle(String key, bool on) => _guard(() async {
+        await _manager!.run(SurgeAction.setEnvironment, ['$key=${on ? 1 : 0}']);
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+      });
+
+  Future<void> killConnection(String id) => _guard(() async {
+        await _manager!.run(SurgeAction.kill, [id]);
+        await refreshTraffic();
+      });
+
+  Future<void> refreshProfiles() async {
+    try {
+      profiles = await _manager!.listProfiles();
+      notifyListeners();
+    } catch (_) {
+      profiles = [];
+    }
+  }
+
+  Future<void> switchProfile(String name) => _guard(() async {
+        await _manager!.run(SurgeAction.switchProfile, [name]);
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+        await refreshPolicies();
+      });
 
   void _mergeTests(List<PolicyTest> tests) {
     for (final t in tests) {

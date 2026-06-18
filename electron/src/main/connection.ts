@@ -2,7 +2,9 @@ import { EventEmitter } from "node:events";
 import type { Client, ClientChannel } from "ssh2";
 import {
   buildCommandLine,
+  buildListProfilesCommand,
   parseLogLine,
+  parseProfiles,
   type CommandResult,
   type ConnectionState,
   type HostConfig,
@@ -81,6 +83,15 @@ export class ConnectionManager extends EventEmitter {
       stdout: stdout || stderr,
       durationMs: Date.now() - started,
     };
+  }
+
+  /** List `*.conf` profiles in the host's configured config directory. */
+  async listProfiles(): Promise<string[]> {
+    if (!this.client || !this.current) throw new Error("Not connected");
+    const dir = this.current.configDir;
+    if (!dir) return [];
+    const { stdout } = await exec(this.client, buildListProfilesCommand(dir));
+    return parseProfiles(stdout);
   }
 
   /** Stream `surge watch request`, emitting parsed LogLine events. */

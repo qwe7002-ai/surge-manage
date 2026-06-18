@@ -7,6 +7,7 @@ import {
   parsePolicyTests,
   parseRules,
   parseSubPolicies,
+  type ActiveConnection,
   type ConnectionState,
   type Environment,
   type HostConfig,
@@ -30,6 +31,8 @@ interface AppState {
   policyTests: Record<string, PolicyTest>;
   rules: Rule[];
   traffic: Traffic | null;
+  connections: ActiveConnection[];
+  profiles: string[];
   logs: LogLine[];
   logStreaming: boolean;
   busy: boolean;
@@ -49,6 +52,10 @@ interface AppState {
   refreshTraffic: () => Promise<void>;
   selectPolicy: (group: string, policy: string) => Promise<void>;
   setProxyMode: (mode: number) => Promise<void>;
+  setToggle: (key: string, on: boolean) => Promise<void>;
+  killConnection: (id: string) => Promise<void>;
+  refreshProfiles: () => Promise<void>;
+  switchProfile: (name: string) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
   /** Run a no-arg or single-arg surge action and surface its result text. */
@@ -68,6 +75,8 @@ export const useApp = create<AppState>((set, get) => ({
   policyTests: {},
   rules: [],
   traffic: null,
+  connections: [],
+  profiles: [],
   logs: [],
   logStreaming: false,
   busy: false,
@@ -82,6 +91,7 @@ export const useApp = create<AppState>((set, get) => ({
         void get().refreshEnvironment();
         void get().refreshPolicies();
         void get().refreshTraffic();
+        void get().refreshProfiles();
       }
       if (connection.phase === "disconnected" || connection.phase === "error") {
         set({
@@ -91,6 +101,8 @@ export const useApp = create<AppState>((set, get) => ({
           policyTests: {},
           rules: [],
           traffic: null,
+          connections: [],
+          profiles: [],
           logStreaming: false,
         });
       }
@@ -175,10 +187,41 @@ export const useApp = create<AppState>((set, get) => ({
   async refreshTraffic() {
     try {
       const r = await window.surge.surge.run("dumpActive");
-      set({ traffic: aggregateTraffic(parseActive(r.stdout)) });
+      const connections = parseActive(r.stdout);
+      set({ connections, traffic: aggregateTraffic(connections) });
     } catch {
       /* polling is best-effort */
     }
+  },
+
+  async setToggle(key, on) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("setEnvironment", [`${key}=${on ? 1 : 0}`]);
+      await get().refreshEnvironment();
+    });
+  },
+
+  async killConnection(id) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("kill", [id]);
+      await get().refreshTraffic();
+    });
+  },
+
+  async refreshProfiles() {
+    try {
+      set({ profiles: await window.surge.profiles.list() });
+    } catch {
+      set({ profiles: [] });
+    }
+  },
+
+  async switchProfile(name) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("switchProfile", [name]);
+      await get().refreshEnvironment();
+      await get().refreshPolicies();
+    });
   },
 
   async selectPolicy(group, policy) {
