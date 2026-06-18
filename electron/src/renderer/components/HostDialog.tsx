@@ -69,9 +69,14 @@ function toForm(host: HostConfig): FormState {
 export function HostDialog({ open, onOpenChange, initial }: Props) {
   const saveHost = useApp((s) => s.saveHost);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setForm(initial ? toForm(initial) : emptyForm());
+    if (open) {
+      setForm(initial ? toForm(initial) : emptyForm());
+      setError(null);
+    }
   }, [open, initial]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -79,30 +84,39 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
   }
 
   async function onSave() {
-    const id = initial?.id ?? crypto.randomUUID();
-    const needsSecret = form.auth === "password" || (form.auth === "key" && !!form.secret);
-    const secretRef = needsSecret ? `host:${id}` : undefined;
+    setSaving(true);
+    setError(null);
+    try {
+      const id = initial?.id ?? crypto.randomUUID();
+      const needsSecret = form.auth === "password" || (form.auth === "key" && !!form.secret);
+      const secretRef = needsSecret ? `host:${id}` : undefined;
 
-    if (secretRef && form.secret) {
-      await window.surge.hosts.setSecret(secretRef, form.secret);
+      if (secretRef && form.secret) {
+        await window.surge.hosts.setSecret(secretRef, form.secret);
+      }
+
+      const host: HostConfig = {
+        id,
+        label: form.label.trim() || form.host,
+        host: form.host.trim(),
+        port: Number(form.port) || 22,
+        username: form.username.trim(),
+        auth: form.auth,
+        privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
+        secretRef,
+        surge: { bin: form.surgeBin.trim() || "surge-cli" },
+        configDir: form.configDir.trim() || undefined,
+        createdAt: initial?.createdAt ?? Date.now(),
+        lastConnectedAt: initial?.lastConnectedAt,
+      };
+      await saveHost(host);
+      onOpenChange(false);
+    } catch (e) {
+      // Never leave the button looking dead: surface why the save failed.
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
-
-    const host: HostConfig = {
-      id,
-      label: form.label.trim() || form.host,
-      host: form.host.trim(),
-      port: Number(form.port) || 22,
-      username: form.username.trim(),
-      auth: form.auth,
-      privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
-      secretRef,
-      surge: { bin: form.surgeBin.trim() || "surge-cli" },
-      configDir: form.configDir.trim() || undefined,
-      createdAt: initial?.createdAt ?? Date.now(),
-      lastConnectedAt: initial?.lastConnectedAt,
-    };
-    await saveHost(host);
-    onOpenChange(false);
   }
 
   const valid = form.host.trim() && form.username.trim();
@@ -211,12 +225,18 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
           </Field>
         </div>
 
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" disabled={saving} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!valid} onClick={() => void onSave()}>
-            Save
+          <Button disabled={!valid || saving} onClick={() => void onSave()}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
