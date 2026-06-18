@@ -6,8 +6,10 @@ import {
   parseActive,
   parseEnvironment,
   parseExternalResources,
+  parseConfigProxies,
   parsePolicies,
   parsePolicyTests,
+  parseProxyGroups,
   parseRules,
   parseSubPolicies,
   parseTempRules,
@@ -51,6 +53,27 @@ test("parseEnvironment flattens, unwraps envelope, extracts selection/mode", () 
   // Also works without the envelope wrapper.
   const flat = parseEnvironment('{"ProxyMode":0}');
   assert.equal(flat.proxyMode, 0);
+});
+
+test("parseProxyGroups reads [Proxy Group] members from config", () => {
+  const cfg = `
+# comment
+[Proxy]
+HK = trojan, hk.example.com, 443, password=x
+US = ss, us.example.com, 8388
+
+[Proxy Group]
+Proxy = select, HK, US, DIRECT
+Auto = url-test, HK, US, url = http://t.com, interval=300
+
+[Rule]
+FINAL,Proxy
+`;
+  const groups = parseProxyGroups(cfg);
+  assert.deepEqual(groups["Proxy"], ["HK", "US", "DIRECT"]);
+  // group type dropped, and `url=`/`interval=` option tokens excluded.
+  assert.deepEqual(groups["Auto"], ["HK", "US"]);
+  assert.deepEqual(parseConfigProxies(cfg), ["HK", "US"]);
 });
 
 test("parseSubPolicies maps group → members", () => {

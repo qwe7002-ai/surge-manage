@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { AuthMethod, HostConfig } from "@surge-manage/shared";
+import { DEFAULT_SURGE_BIN, type AuthMethod, type HostConfig } from "@surge-manage/shared";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +46,7 @@ function emptyForm(): FormState {
     username: "root",
     auth: "key",
     privateKeyPath: "",
-    surgeBin: "surge-cli",
+    surgeBin: DEFAULT_SURGE_BIN,
     configDir: "",
     secret: "",
   };
@@ -104,7 +104,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
         auth: form.auth,
         privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
         secretRef,
-        surge: { bin: form.surgeBin.trim() || "surge-cli" },
+        surge: { bin: form.surgeBin.trim() || DEFAULT_SURGE_BIN },
         configDir: form.configDir.trim() || undefined,
         createdAt: initial?.createdAt ?? Date.now(),
         lastConnectedAt: initial?.lastConnectedAt,
@@ -211,7 +211,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
           <Field label="Surge binary">
             <Input
               value={form.surgeBin}
-              placeholder="surge-cli (or /Applications/Surge.app/Contents/Applications/surge-cli)"
+              placeholder={DEFAULT_SURGE_BIN}
               onChange={(e) => set("surgeBin", e.target.value)}
             />
           </Field>

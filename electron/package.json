@@ -31,8 +31,7 @@
     "lint": "echo \"(eslint config omitted in scaffold)\""
   },
   "dependencies": {
-    "ssh2": "^1.16.0",
-    "keytar": "^7.9.0"
+    "ssh2": "^1.16.0"
   },
   "devDependencies": {
     "@surge-manage/shared": "workspace:*",

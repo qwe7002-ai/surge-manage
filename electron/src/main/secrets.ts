@@ -1,35 +1,44 @@
 /**
- * Thin wrapper over the OS keychain (keytar). Secrets (SSH passphrases,
- * passwords) are referenced from config by a `secretRef` string; the plaintext
- * never touches disk in our own files.
+ * Secret storage for SSH passphrases / passwords.
  *
- * keytar is a native module; if it fails to load (e.g. missing libsecret on a
- * headless Linux box) we fall back to an in-memory store so the app still runs,
- * logging a warning. Production builds should ship libsecret.
+ * Secrets are referenced from config by a `secretRef` string; the plaintext
+ * never sits in our own config files. We persist them with Electron's
+ * `safeStorage`, which encrypts via the OS-native facility (DPAPI on Windows,
+ * Keychain on macOS, libsecret/kwallet on Linux) and write the ciphertext to a
+ * small JSON file under userData. This is far more reliable than a native
+ * keychain addon (keytar): no native build, and — crucially — it actually
+ * persists across restarts on Windows, where the previous keytar path could
+ * fail at the call site and silently fall back to a process-only store, leaving
+ * the password "not found in keychain" after a relaunch.
  *
- * Loading is not the only failure mode: on Windows the native binding can load
- * yet still throw at the Credential Manager call (ABI mismatches with the
- * bundled Electron, partial native loads, transient vault errors). If those
- * runtime errors escaped this module they would reject the renderer's save IPC
- * — and because the Save handler swallows rejections, the button would appear
- * dead. So every operation degrades to the in-memory store instead of throwing.
+ * If encryption is unavailable (rare; e.g. a misconfigured Linux box), we store
+ * the value obfuscated (base64) so the app keeps working, logging a warning.
  */
-const SERVICE = "surge-manage";
+import { app, safeStorage } from "electron";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
-type Keytar = typeof import("keytar");
-let keytar: Keytar | null = null;
+/** ref → tagged, encoded secret. Tag distinguishes encrypted vs. plain bytes. */
+type Store = Record<string, string>;
+
 let warned = false;
-const memory = new Map<string, string>();
 
-async function load(): Promise<Keytar | null> {
-  if (keytar) return keytar;
+function file(): string {
+  return join(app.getPath("userData"), "surge-manage", "secrets.json");
+}
+
+async function read(): Promise<Store> {
   try {
-    keytar = await import("keytar");
-    return keytar;
+    return JSON.parse(await readFile(file(), "utf8")) as Store;
   } catch {
-    warnOnce("keytar unavailable — falling back to in-memory secret store");
-    return null;
+    return {};
   }
+}
+
+async function write(store: Store): Promise<void> {
+  const path = file();
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(store), "utf8");
 }
 
 function warnOnce(message: string): void {
@@ -39,42 +48,37 @@ function warnOnce(message: string): void {
 }
 
 export async function setSecret(ref: string, value: string): Promise<void> {
-  const kt = await load();
-  if (kt) {
-    try {
-      await kt.setPassword(SERVICE, ref, value);
-      return;
-    } catch (err) {
-      warnOnce(`keychain write failed — using in-memory secret store: ${errText(err)}`);
-    }
+  const store = await read();
+  if (safeStorage.isEncryptionAvailable()) {
+    store[ref] = `enc:${safeStorage.encryptString(value).toString("base64")}`;
+  } else {
+    warnOnce("OS encryption unavailable — storing secrets obfuscated, not encrypted");
+    store[ref] = `raw:${Buffer.from(value, "utf8").toString("base64")}`;
   }
-  memory.set(ref, value);
+  await write(store);
 }
 
 export async function getSecret(ref: string): Promise<string | undefined> {
-  const kt = await load();
-  if (kt) {
+  const store = await read();
+  const v = store[ref];
+  if (!v) return undefined;
+  if (v.startsWith("enc:")) {
     try {
-      return (await kt.getPassword(SERVICE, ref)) ?? memory.get(ref);
+      return safeStorage.decryptString(Buffer.from(v.slice(4), "base64"));
     } catch (err) {
-      warnOnce(`keychain read failed — using in-memory secret store: ${errText(err)}`);
+      warnOnce(`failed to decrypt secret: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
     }
   }
-  return memory.get(ref);
+  if (v.startsWith("raw:")) {
+    return Buffer.from(v.slice(4), "base64").toString("utf8");
+  }
+  return v; // legacy/plain value
 }
 
 export async function deleteSecret(ref: string): Promise<void> {
-  const kt = await load();
-  if (kt) {
-    try {
-      await kt.deletePassword(SERVICE, ref);
-    } catch (err) {
-      warnOnce(`keychain delete failed — using in-memory secret store: ${errText(err)}`);
-    }
-  }
-  memory.delete(ref);
-}
-
-function errText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const store = await read();
+  if (!(ref in store)) return;
+  delete store[ref];
+  await write(store);
 }

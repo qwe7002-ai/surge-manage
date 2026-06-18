@@ -6,6 +6,7 @@ import {
   parsePolicies,
   parsePolicyTests,
   parseExternalResources,
+  parseProxyGroups,
   parseRules,
   parseSubPolicies,
   parseTempRules,
@@ -43,6 +44,8 @@ interface AppState {
   busy: boolean;
   lastError: string | null;
   lastInfo: string | null;
+  /** Internal: prevents overlapping `refreshTraffic` polls. */
+  _trafficInFlight: boolean;
 
   init: () => Promise<void>;
   refreshHosts: () => Promise<void>;
@@ -57,6 +60,7 @@ interface AppState {
   refreshTempRules: () => Promise<void>;
   addTempRule: (rule: string) => Promise<void>;
   delTempRule: (rule: string) => Promise<void>;
+  updateTempRule: (oldRule: string, newRule: string) => Promise<void>;
   flushTempRules: () => Promise<void>;
   refreshResources: () => Promise<void>;
   updateResource: (key: string) => Promise<void>;
@@ -96,6 +100,7 @@ export const useApp = create<AppState>((set, get) => ({
   busy: false,
   lastError: null,
   lastInfo: null,
+  _trafficInFlight: false,
 
   async init() {
     window.surge.connection.onState((connection) => {
@@ -180,13 +185,18 @@ export const useApp = create<AppState>((set, get) => ({
 
   async refreshPolicies() {
     await guarded(set, async () => {
-      const [dump, subs] = await Promise.all([
+      const [dump, subs, cfg] = await Promise.all([
         window.surge.surge.run("dumpPolicy"),
         window.surge.surge.run("dumpPolicySubPolicies").catch(() => null),
+        // Proxy-group members are most reliably read from the profile config.
+        window.surge.surge.run("dumpProfileOriginal").catch(() => null),
       ]);
+      const fromDump = subs ? parseSubPolicies(subs.stdout) : {};
+      const fromConfig = cfg ? parseProxyGroups(cfg.stdout) : {};
       set({
         policies: parsePolicies(dump.stdout),
-        subPolicies: subs ? parseSubPolicies(subs.stdout) : {},
+        // Config-derived members win; dump fills any gaps.
+        subPolicies: { ...fromDump, ...fromConfig },
       });
       // Selection lives in the environment dictionary.
       await get().refreshEnvironment();
@@ -223,6 +233,13 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
+  async updateTempRule(oldRule, newRule) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("updateTempRule", [oldRule, newRule]);
+      await get().refreshTempRules();
+    });
+  },
+
   async flushTempRules() {
     await guarded(set, async () => {
       await window.surge.surge.run("flushTempRule");
@@ -252,12 +269,18 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async refreshTraffic() {
+    // Guard against overlapping polls: a slow `dump active` on a busy node must
+    // not pile up exec calls (which froze the Connections page).
+    if (get()._trafficInFlight) return;
+    set({ _trafficInFlight: true });
     try {
       const r = await window.surge.surge.run("dumpActive");
       const connections = parseActive(r.stdout);
       set({ connections, traffic: aggregateTraffic(connections) });
     } catch {
       /* polling is best-effort */
+    } finally {
+      set({ _trafficInFlight: false });
     }
   },
 
