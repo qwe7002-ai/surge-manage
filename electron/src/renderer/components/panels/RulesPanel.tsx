@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Disconnected } from "@/components/Disconnected";
-import { SectionEditor } from "@/components/SectionEditor";
+import { RuleEditor } from "@/components/RuleEditor";
 import { useApp } from "@/store/app-store";
 
 export function RulesPanel() {
@@ -29,11 +29,7 @@ export function RulesPanel() {
         <TabsTrigger value="temporary">Temporary</TabsTrigger>
       </TabsList>
       <TabsContent value="permanent" className="min-h-0 flex-1">
-        <SectionEditor
-          section="Rule"
-          placeholder="DOMAIN-SUFFIX,example.com,Proxy"
-          hint="Edits the [Rule] section of the selected profile, then reloads Surge."
-        />
+        <RuleEditor />
       </TabsContent>
       <TabsContent value="temporary" className="min-h-0 flex-1">
         <TemporaryRules />

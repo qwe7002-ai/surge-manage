@@ -81,3 +81,60 @@ List<ConfigSection> setSectionEntries(
   next.add(ConfigSection(name: name, lines: [...entries]));
   return next;
 }
+
+/// A single rule line, tracking whether it is enabled. In a Surge `[Rule]`
+/// section a `#`-prefixed line is a *disabled* rule, not just a comment.
+class RuleEntry {
+  RuleEntry({required this.text, required this.enabled});
+
+  /// Rule text with any leading comment marker stripped.
+  final String text;
+
+  /// False when the line was commented out (a disabled rule).
+  final bool enabled;
+
+  RuleEntry copyWith({String? text, bool? enabled}) =>
+      RuleEntry(text: text ?? this.text, enabled: enabled ?? this.enabled);
+}
+
+final _ruleCommentRe = RegExp(r'^(?:#+|//|;)\s?');
+
+/// Read a `[Rule]`-style section preserving order and disabled (`#`) rules.
+/// Unlike [getSectionEntries], commented lines are returned as disabled
+/// entries instead of being dropped.
+List<RuleEntry> getRuleEntries(List<ConfigSection> sections, String name) {
+  final lower = name.toLowerCase();
+  for (final s in sections) {
+    if (s.name?.toLowerCase() == lower) {
+      final out = <RuleEntry>[];
+      for (final raw in s.lines) {
+        final t = raw.trim();
+        if (t.isEmpty) continue;
+        final m = _ruleCommentRe.firstMatch(t);
+        if (m != null) {
+          final text = t.substring(m.end).trim();
+          if (text.isNotEmpty) out.add(RuleEntry(text: text, enabled: false));
+        } else {
+          out.add(RuleEntry(text: t, enabled: true));
+        }
+      }
+      return out;
+    }
+  }
+  return const [];
+}
+
+/// Replace a `[Rule]`-style section from [RuleEntry] values, re-adding a `# `
+/// prefix for disabled rules so they survive the round-trip.
+List<ConfigSection> setRuleEntries(
+  List<ConfigSection> sections,
+  String name,
+  List<RuleEntry> entries,
+) {
+  final lines = entries
+      .map((e) => RuleEntry(text: e.text.trim(), enabled: e.enabled))
+      .where((e) => e.text.isNotEmpty)
+      .map((e) => e.enabled ? e.text : '# ${e.text}')
+      .toList();
+  return setSectionEntries(sections, name, lines);
+}

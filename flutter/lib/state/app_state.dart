@@ -322,6 +322,23 @@ class AppState extends ChangeNotifier {
         lastInfo = 'Saved $section to $profile.conf and reloaded';
       });
 
+  /// Read the `[Rule]` section as ordered rules, including `#`-disabled ones.
+  Future<List<RuleEntry>> readProfileRules(String profile) async {
+    final text = await _manager!.readProfile(_profilePath(profile));
+    return getRuleEntries(parseConfigDocument(text), 'Rule');
+  }
+
+  /// Replace the `[Rule]` section from rule entries (disabled → `#`), reload.
+  Future<void> writeProfileRules(String profile, List<RuleEntry> entries) =>
+      _guard(() async {
+        final path = _profilePath(profile);
+        final text = await _manager!.readProfile(path);
+        final next = setRuleEntries(parseConfigDocument(text), 'Rule', entries);
+        await _manager!.writeProfile(path, serializeConfigDocument(next));
+        await _manager!.run(SurgeAction.reload);
+        lastInfo = 'Saved Rule to $profile.conf and reloaded';
+      });
+
   void _mergeTests(List<PolicyTest> tests) {
     for (final t in tests) {
       policyTests[t.name] = t;

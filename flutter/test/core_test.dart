@@ -107,6 +107,26 @@ void main() {
     expect(out.contains('HK = trojan, hk.com, 443'), isTrue);
   });
 
+  test('getRuleEntries surfaces #-disabled rules; setRuleEntries round-trips', () {
+    const text = '[Rule]\nDOMAIN-SUFFIX,active.com,Proxy\n'
+        '# DOMAIN-SUFFIX,disabled.com,DIRECT\n\nFINAL,Proxy';
+    final doc = parseConfigDocument(text);
+    final rules = getRuleEntries(doc, 'Rule');
+    expect(rules.map((r) => '${r.text}|${r.enabled}').toList(), [
+      'DOMAIN-SUFFIX,active.com,Proxy|true',
+      'DOMAIN-SUFFIX,disabled.com,DIRECT|false',
+      'FINAL,Proxy|true',
+    ]);
+    final toggled =
+        rules.map((r) => r.copyWith(enabled: !r.enabled)).toList();
+    final out = serializeConfigDocument(setRuleEntries(doc, 'Rule', toggled));
+    expect(out.contains('# DOMAIN-SUFFIX,active.com,Proxy'), isTrue);
+    expect(out.contains('\nDOMAIN-SUFFIX,disabled.com,DIRECT'), isTrue);
+    final reparsed = getRuleEntries(parseConfigDocument(out), 'Rule');
+    expect(reparsed.map((r) => '${r.text}|${r.enabled}').toList(),
+        toggled.map((r) => '${r.text}|${r.enabled}').toList());
+  });
+
   test('buildCommandLine adds --raw to test commands', () {
     expect(buildCommandLine(profile, SurgeAction.testAllPolicies),
         'surge-cli --raw test-all-policies');

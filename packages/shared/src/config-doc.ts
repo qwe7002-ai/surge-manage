@@ -71,3 +71,56 @@ export function setSectionEntries(
   }
   return next;
 }
+
+/**
+ * A single rule line, tracking whether it is enabled. In a Surge `[Rule]`
+ * section a `#`-prefixed line is a *disabled* rule, not just a comment.
+ */
+export interface RuleEntry {
+  /** Rule text with any leading comment marker stripped. */
+  text: string;
+  /** False when the line was commented out (a disabled rule). */
+  enabled: boolean;
+}
+
+/** Leading comment marker on a disabled rule (`#`, `//` or `;`). */
+const RULE_COMMENT_RE = /^(?:#+|\/\/|;)\s?/;
+
+/**
+ * Read a `[Rule]`-style section preserving order and disabled (`#`) rules.
+ * Unlike {@link getSectionEntries}, commented lines are returned as disabled
+ * entries instead of being dropped.
+ */
+export function getRuleEntries(sections: ConfigSection[], name: string): RuleEntry[] {
+  const s = sections.find((x) => x.name?.toLowerCase() === name.toLowerCase());
+  if (!s) return [];
+  const out: RuleEntry[] = [];
+  for (const raw of s.lines) {
+    const t = raw.trim();
+    if (!t) continue;
+    const m = RULE_COMMENT_RE.exec(t);
+    if (m) {
+      const text = t.slice(m[0].length).trim();
+      if (text) out.push({ text, enabled: false });
+    } else {
+      out.push({ text: t, enabled: true });
+    }
+  }
+  return out;
+}
+
+/**
+ * Replace a `[Rule]`-style section from {@link RuleEntry} values, re-adding a
+ * `# ` prefix for disabled rules so they survive the round-trip.
+ */
+export function setRuleEntries(
+  sections: ConfigSection[],
+  name: string,
+  entries: RuleEntry[],
+): ConfigSection[] {
+  const lines = entries
+    .map((e) => ({ text: e.text.trim(), enabled: e.enabled }))
+    .filter((e) => e.text)
+    .map((e) => (e.enabled ? e.text : `# ${e.text}`));
+  return setSectionEntries(sections, name, lines);
+}

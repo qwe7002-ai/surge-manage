@@ -13,9 +13,11 @@ import {
   parseTempRules,
 } from "../dist/parsers.js";
 import {
+  getRuleEntries,
   getSectionEntries,
   parseConfigDocument,
   serializeConfigDocument,
+  setRuleEntries,
   setSectionEntries,
 } from "../dist/config-doc.js";
 import type { SurgeProfile } from "../dist/types.js";
@@ -85,6 +87,29 @@ test("config-doc round-trips and edits one section without clobbering others", (
   // A section added when absent is appended.
   const withDns = setSectionEntries(doc, "DNS", ["server = 1.1.1.1"]);
   assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
+});
+
+test("getRuleEntries surfaces #-disabled rules; setRuleEntries round-trips", () => {
+  const text = [
+    "[Rule]",
+    "DOMAIN-SUFFIX,active.com,Proxy",
+    "# DOMAIN-SUFFIX,disabled.com,DIRECT",
+    "",
+    "FINAL,Proxy",
+  ].join("\n");
+  const doc = parseConfigDocument(text);
+  const rules = getRuleEntries(doc, "Rule");
+  assert.deepEqual(rules, [
+    { text: "DOMAIN-SUFFIX,active.com,Proxy", enabled: true },
+    { text: "DOMAIN-SUFFIX,disabled.com,DIRECT", enabled: false },
+    { text: "FINAL,Proxy", enabled: true },
+  ]);
+  // Toggling enabled state must survive a write → read round-trip.
+  const toggled = rules.map((r) => ({ ...r, enabled: !r.enabled }));
+  const out = serializeConfigDocument(setRuleEntries(doc, "Rule", toggled));
+  assert.ok(out.includes("# DOMAIN-SUFFIX,active.com,Proxy"));
+  assert.ok(out.includes("\nDOMAIN-SUFFIX,disabled.com,DIRECT"));
+  assert.deepEqual(getRuleEntries(parseConfigDocument(out), "Rule"), toggled);
 });
 
 test("parseSubPolicies maps group → members", () => {

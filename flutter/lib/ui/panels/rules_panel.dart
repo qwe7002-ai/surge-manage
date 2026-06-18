@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/app_state.dart';
 import '../home_page.dart';
-import '../section_editor.dart';
+import '../rule_editor.dart';
 
 class RulesPanel extends StatefulWidget {
   const RulesPanel({super.key});
@@ -44,13 +44,7 @@ class _RulesPanelState extends State<RulesPanel> {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: _tab == 0
-              ? const SectionEditor(
-                  section: 'Rule',
-                  placeholder: 'DOMAIN-SUFFIX,example.com,Proxy',
-                  hint: 'Edits the [Rule] section of the selected profile, then reloads.',
-                )
-              : const _TemporaryRules(),
+          child: _tab == 0 ? const RuleEditor() : const _TemporaryRules(),
         ),
       ],
     );

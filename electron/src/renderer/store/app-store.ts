@@ -2,9 +2,11 @@ import { create } from "zustand";
 import {
   aggregateTraffic,
   DEFAULT_CONFIG_DIR,
+  getRuleEntries,
   getSectionEntries,
   parseConfigDocument,
   serializeConfigDocument,
+  setRuleEntries,
   setSectionEntries,
   parseActive,
   parseEnvironment,
@@ -23,6 +25,7 @@ import {
   type PolicyDump,
   type PolicyTest,
   type Rule,
+  type RuleEntry,
   type SurgeAction,
   type Traffic,
 } from "@surge-manage/shared";
@@ -87,6 +90,10 @@ interface AppState {
     section: string,
     entries: string[],
   ) => Promise<void>;
+  /** Read the [Rule] section as ordered rules, including #-disabled ones. */
+  readProfileRules: (profile: string) => Promise<RuleEntry[]>;
+  /** Replace the [Rule] section from rule entries (disabled → `#`), reload. */
+  writeProfileRules: (profile: string, entries: RuleEntry[]) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
   /** Run a no-arg or single-arg surge action and surface its result text. */
@@ -355,6 +362,22 @@ export const useApp = create<AppState>((set, get) => ({
       // Apply the change if we edited the active profile.
       await window.surge.surge.run("reload");
       set({ lastInfo: `Saved ${section} to ${profile}.conf and reloaded` });
+    });
+  },
+
+  async readProfileRules(profile) {
+    const text = await window.surge.profiles.read(profilePath(get, profile));
+    return getRuleEntries(parseConfigDocument(text), "Rule");
+  },
+
+  async writeProfileRules(profile, entries) {
+    await guarded(set, async () => {
+      const path = profilePath(get, profile);
+      const text = await window.surge.profiles.read(path);
+      const next = setRuleEntries(parseConfigDocument(text), "Rule", entries);
+      await window.surge.profiles.write(path, serializeConfigDocument(next));
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved Rule to ${profile}.conf and reloaded` });
     });
   },
 
