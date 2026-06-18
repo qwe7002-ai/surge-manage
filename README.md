@@ -55,6 +55,17 @@ flutter pub get
 flutter run
 ```
 
+## Packaging the desktop app
+
+```bash
+pnpm --filter @surge-manage/electron package:linux   # AppImage + deb
+pnpm --filter @surge-manage/electron package:mac      # dmg + zip
+pnpm --filter @surge-manage/electron package:win      # NSIS installer
+```
+
+Installers are written to `electron/release/`. See [`docs/packaging.md`](docs/packaging.md)
+for prerequisites and how the pnpm workspace / native modules are handled.
+
 ## Connection model
 
 1. The client opens an **SSH** connection to the host (key / password / agent auth).

@@ -4,6 +4,11 @@
   "private": true,
   "description": "Surge Manage desktop client (Electron + React + shadcn/ui)",
   "license": "MIT",
+  "author": {
+    "name": "Surge Manage",
+    "email": "noreply@example.com"
+  },
+  "homepage": "https://github.com/qwe7002-ai/surge-manage",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -12,15 +17,21 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "package": "electron-vite build && electron-builder",
+    "make-icon": "node build/make-icon.mjs",
+    "prepackage": "electron-vite build",
+    "package": "electron-builder",
+    "package:dir": "electron-vite build && electron-builder --dir",
+    "package:mac": "electron-vite build && electron-builder --mac",
+    "package:win": "electron-vite build && electron-builder --win",
+    "package:linux": "electron-vite build && electron-builder --linux",
     "lint": "echo \"(eslint config omitted in scaffold)\""
   },
   "dependencies": {
-    "@surge-manage/shared": "workspace:*",
     "ssh2": "^1.16.0",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
+    "@surge-manage/shared": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-select": "^2.1.2",

@@ -1,0 +1,75 @@
+$schema: https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json
+appId: com.surgemanage.app
+productName: Surge Manage
+executableName: surge-manage
+copyright: Copyright © 2026 Surge Manage
+# Clean, scope-free artifact filenames (package name is "@surge-manage/electron").
+artifactName: surge-manage-${version}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+# `out/**` is the electron-vite output. Production deps (ssh2, keytar) are
+# collected automatically; the workspace `shared` package is bundled in so it is
+# intentionally absent from node_modules.
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.{map,md,ts}"
+  - "!**/{tsconfig.json,tsconfig.*.json,.eslintrc.*}"
+
+# Native modules cannot run from inside the asar archive — unpack them.
+asarUnpack:
+  - "**/node_modules/keytar/**"
+  - "**/*.node"
+
+# Rebuild native modules (keytar) against the bundled Electron ABI.
+npmRebuild: true
+electronLanguages:
+  - en
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+linux:
+  icon: build/icon.png
+  category: Network
+  maintainer: Surge Manage <noreply@example.com>
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
