@@ -10,6 +10,7 @@ import 'panels/connections_panel.dart';
 import 'panels/dashboard_panel.dart';
 import 'panels/logs_panel.dart';
 import 'panels/policies_panel.dart';
+import 'panels/resources_panel.dart';
 import 'panels/rules_panel.dart';
 
 /// Top-level shell. The host list is the entry screen; tapping Connect pushes
@@ -52,6 +53,7 @@ class _ManageView extends StatelessWidget {
               FTabEntry(label: Text('Rules'), child: RulesPanel()),
               FTabEntry(label: Text('Connections'), child: ConnectionsPanel()),
               FTabEntry(label: Text('Requests'), child: LogsPanel()),
+              FTabEntry(label: Text('Resources'), child: ResourcesPanel()),
               FTabEntry(label: Text('Config'), child: ConfigPanel()),
             ],
           ),

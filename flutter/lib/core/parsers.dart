@@ -149,6 +149,55 @@ List<Rule> parseRules(String stdout) {
   return out;
 }
 
+/// `surge --raw dump temp-rule` → raw rule strings (what del-temp-rule expects).
+List<String> parseTempRules(String stdout) {
+  final json = _tryJson(stdout);
+  final arr = json is List
+      ? json
+      : (json is Map && json['temp-rule'] is List)
+          ? json['temp-rule'] as List
+          : null;
+  if (arr != null) {
+    return arr
+        .map((item) {
+          if (item is String) return item;
+          if (item is Map) {
+            return [
+              _str(item['type']),
+              _str(item['value']) ?? _str(item['pattern']),
+              _str(item['policy']),
+            ].whereType<String>().join(',');
+          }
+          return '';
+        })
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  return stdout
+      .split(RegExp(r'\r?\n'))
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty && !l.startsWith('#'))
+      .toList();
+}
+
+/// `surge --raw external-resource list`.
+List<ExternalResource> parseExternalResources(String stdout) {
+  final json = _tryJson(stdout);
+  final list = json is List
+      ? json
+      : (json is Map && json['resources'] is List)
+          ? json['resources'] as List
+          : const [];
+  return list.whereType<Map>().map((r) {
+    return ExternalResource(
+      key: _str(r['key']) ?? _str(r['hash']) ?? _str(r['url']) ?? '',
+      url: _str(r['url']),
+      ready: r['ready'] is bool ? r['ready'] as bool : null,
+      updatedAt: _num(r['updatedAt'])?.toInt() ?? _num(r['updated'])?.toInt(),
+    );
+  }).where((r) => r.key.isNotEmpty).toList();
+}
+
 /// `surge --raw dump active` → list of active connections.
 List<ActiveConnection> parseActive(String stdout) {
   final json = _tryJson(stdout);

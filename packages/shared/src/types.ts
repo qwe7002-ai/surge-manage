@@ -61,6 +61,7 @@ export type SurgeAction =
   | "dumpActive" // dump active
   | "dumpRequest" // dump request
   | "dumpDns" // dump dns
+  | "dumpTempRule" // dump temp-rule
   | "dumpProfileEffective" // dump profile effective
   | "dumpProfileOriginal" // dump profile original
   // streaming
@@ -70,6 +71,16 @@ export type SurgeAction =
   | "testPolicy" // test-policy <name>
   | "testAllPolicies" // test-all-policies
   | "testGroup" // test-group <name>
+  | "testPolicyBandwidth" // test-policy-bandwidth <download|upload> <policy>
+  // temporary rules
+  | "addTempRule" // add-temp-rule <rule>
+  | "delTempRule" // del-temp-rule <rule>
+  | "updateTempRule" // update-temp-rule <rule> <new-policy>
+  | "flushTempRule" // flush-temp-rule
+  // external resources
+  | "externalResourceList" // external-resource list
+  | "externalResourceUpdate" // external-resource update <key>
+  | "externalResourceUpdateAll" // external-resource update all
   // operations
   | "flushDns" // flush dns
   | "diagnostics" // diagnostics
@@ -164,6 +175,15 @@ export interface Rule {
   policy: string;
   /** Number of times the rule matched, when surge exposes counters. */
   hits?: number;
+}
+
+/** One entry from `surge --raw external-resource list`. */
+export interface ExternalResource {
+  key: string;
+  url?: string;
+  ready?: boolean;
+  /** Epoch ms of the last update, when reported (remote resources). */
+  updatedAt?: number;
 }
 
 /** One entry from `surge --raw dump active`. */

@@ -43,6 +43,12 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   dumpActive: { action: "dumpActive", argv: ["--raw", "dump", "active"], mutates: false, arity: 0 },
   dumpRequest: { action: "dumpRequest", argv: ["--raw", "dump", "request"], mutates: false, arity: 0 },
   dumpDns: { action: "dumpDns", argv: ["--raw", "dump", "dns"], mutates: false, arity: 0 },
+  dumpTempRule: {
+    action: "dumpTempRule",
+    argv: ["--raw", "dump", "temp-rule"],
+    mutates: false,
+    arity: 0,
+  },
   dumpProfileEffective: {
     action: "dumpProfileEffective",
     argv: ["dump", "profile", "effective"],
@@ -73,6 +79,47 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     arity: 0,
   },
   testGroup: { action: "testGroup", argv: ["test-group", "{0}"], mutates: true, arity: 1 },
+  testPolicyBandwidth: {
+    action: "testPolicyBandwidth",
+    argv: ["test-policy-bandwidth", "{0}", "{1}"], // <download|upload> <policy>
+    mutates: false,
+    streaming: true,
+    arity: 2,
+  },
+  // temporary rules
+  addTempRule: { action: "addTempRule", argv: ["add-temp-rule", "{0}"], mutates: true, arity: 1 },
+  delTempRule: { action: "delTempRule", argv: ["del-temp-rule", "{0}"], mutates: true, arity: 1 },
+  updateTempRule: {
+    action: "updateTempRule",
+    argv: ["update-temp-rule", "{0}", "{1}"],
+    mutates: true,
+    arity: 2,
+  },
+  flushTempRule: {
+    action: "flushTempRule",
+    argv: ["flush-temp-rule"],
+    mutates: true,
+    arity: 0,
+  },
+  // external resources
+  externalResourceList: {
+    action: "externalResourceList",
+    argv: ["--raw", "external-resource", "list"],
+    mutates: false,
+    arity: 0,
+  },
+  externalResourceUpdate: {
+    action: "externalResourceUpdate",
+    argv: ["external-resource", "update", "{0}"],
+    mutates: true,
+    arity: 1,
+  },
+  externalResourceUpdateAll: {
+    action: "externalResourceUpdateAll",
+    argv: ["external-resource", "update", "all"],
+    mutates: true,
+    arity: 0,
+  },
   // operations
   flushDns: { action: "flushDns", argv: ["flush", "dns"], mutates: true, arity: 0 },
   diagnostics: { action: "diagnostics", argv: ["diagnostics"], mutates: false, arity: 0 },

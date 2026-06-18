@@ -5,10 +5,12 @@ import {
   aggregateTraffic,
   parseActive,
   parseEnvironment,
+  parseExternalResources,
   parsePolicies,
   parsePolicyTests,
   parseRules,
   parseSubPolicies,
+  parseTempRules,
 } from "../dist/parsers.js";
 import type { SurgeProfile } from "../dist/types.js";
 
@@ -85,6 +87,39 @@ test("parseRules parses json and csv fallback", () => {
   assert.equal(csv.length, 2);
   assert.equal(csv[0]!.value, "google.com");
   assert.equal(csv[1]!.type, "FINAL");
+});
+
+test("parseTempRules handles strings, objects, and text", () => {
+  assert.deepEqual(parseTempRules('["DOMAIN,a.com,Proxy"]'), ["DOMAIN,a.com,Proxy"]);
+  assert.deepEqual(
+    parseTempRules('[{"type":"DOMAIN-SUFFIX","value":"b.com","policy":"DIRECT"}]'),
+    ["DOMAIN-SUFFIX,b.com,DIRECT"],
+  );
+  assert.deepEqual(parseTempRules("DOMAIN,c.com,Proxy\n# c\n"), ["DOMAIN,c.com,Proxy"]);
+});
+
+test("parseExternalResources reads key/ready/updatedAt", () => {
+  const r = parseExternalResources(
+    '[{"key":"abc","url":"https://x/list","ready":true,"updatedAt":1700000000000}]',
+  );
+  assert.equal(r[0]!.key, "abc");
+  assert.equal(r[0]!.ready, true);
+  assert.equal(r[0]!.updatedAt, 1700000000000);
+});
+
+test("buildCommandLine for temp-rule and external-resource", () => {
+  assert.equal(
+    buildCommandLine(profile, "addTempRule", ["DOMAIN,a.com,Proxy"]),
+    "surge add-temp-rule 'DOMAIN,a.com,Proxy'",
+  );
+  assert.equal(
+    buildCommandLine(profile, "externalResourceUpdate", ["abc"]),
+    "surge external-resource update abc",
+  );
+  assert.equal(
+    buildCommandLine(profile, "externalResourceUpdateAll"),
+    "surge external-resource update all",
+  );
 });
 
 test("parseActive + aggregateTraffic", () => {

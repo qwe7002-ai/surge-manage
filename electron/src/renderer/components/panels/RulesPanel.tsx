@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,13 +9,29 @@ import { useApp } from "@/store/app-store";
 export function RulesPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
   const rules = useApp((s) => s.rules);
+  const tempRules = useApp((s) => s.tempRules);
   const busy = useApp((s) => s.busy);
   const refreshRules = useApp((s) => s.refreshRules);
+  const refreshTempRules = useApp((s) => s.refreshTempRules);
+  const addTempRule = useApp((s) => s.addTempRule);
+  const delTempRule = useApp((s) => s.delTempRule);
+  const flushTempRules = useApp((s) => s.flushTempRules);
   const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
-    if (connected) void refreshRules();
-  }, [connected, refreshRules]);
+    if (connected) {
+      void refreshRules();
+      void refreshTempRules();
+    }
+  }, [connected, refreshRules, refreshTempRules]);
+
+  function submitTempRule() {
+    const r = draft.trim();
+    if (!r) return;
+    void addTempRule(r);
+    setDraft("");
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -32,6 +48,59 @@ export function RulesPanel() {
 
   return (
     <div className="flex h-full flex-col space-y-3">
+      <div className="rounded-md border p-2.5">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Temporary rules
+          </span>
+          <Badge variant="secondary">{tempRules.length}</Badge>
+          {tempRules.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-7 text-destructive"
+              disabled={busy}
+              onClick={() => void flushTempRules()}
+            >
+              <Trash2 /> Flush all
+            </Button>
+          )}
+        </div>
+        <div className="mb-2 flex gap-1.5">
+          <Input
+            value={draft}
+            placeholder="DOMAIN-SUFFIX,example.com,Proxy"
+            className="h-8 font-mono text-xs"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submitTempRule()}
+          />
+          <Button size="sm" className="h-8" disabled={busy} onClick={submitTempRule}>
+            <Plus /> Add
+          </Button>
+        </div>
+        {tempRules.length > 0 && (
+          <div className="max-h-28 space-y-1 overflow-auto">
+            {tempRules.map((r) => (
+              <div
+                key={r}
+                className="flex items-center gap-2 rounded bg-accent/40 px-2 py-1"
+              >
+                <code className="flex-1 truncate text-xs">{r}</code>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-destructive"
+                  disabled={busy}
+                  onClick={() => void delTempRule(r)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

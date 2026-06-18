@@ -5,11 +5,14 @@ import {
   parseEnvironment,
   parsePolicies,
   parsePolicyTests,
+  parseExternalResources,
   parseRules,
   parseSubPolicies,
+  parseTempRules,
   type ActiveConnection,
   type ConnectionState,
   type Environment,
+  type ExternalResource,
   type HostConfig,
   type LogLine,
   type PolicyDump,
@@ -30,6 +33,8 @@ interface AppState {
   subPolicies: Record<string, string[]>;
   policyTests: Record<string, PolicyTest>;
   rules: Rule[];
+  tempRules: string[];
+  resources: ExternalResource[];
   traffic: Traffic | null;
   connections: ActiveConnection[];
   profiles: string[];
@@ -49,6 +54,13 @@ interface AppState {
   refreshEnvironment: () => Promise<void>;
   refreshPolicies: () => Promise<void>;
   refreshRules: () => Promise<void>;
+  refreshTempRules: () => Promise<void>;
+  addTempRule: (rule: string) => Promise<void>;
+  delTempRule: (rule: string) => Promise<void>;
+  flushTempRules: () => Promise<void>;
+  refreshResources: () => Promise<void>;
+  updateResource: (key: string) => Promise<void>;
+  updateAllResources: () => Promise<void>;
   refreshTraffic: () => Promise<void>;
   selectPolicy: (group: string, policy: string) => Promise<void>;
   setProxyMode: (mode: number) => Promise<void>;
@@ -74,6 +86,8 @@ export const useApp = create<AppState>((set, get) => ({
   subPolicies: {},
   policyTests: {},
   rules: [],
+  tempRules: [],
+  resources: [],
   traffic: null,
   connections: [],
   profiles: [],
@@ -100,6 +114,8 @@ export const useApp = create<AppState>((set, get) => ({
           subPolicies: {},
           policyTests: {},
           rules: [],
+          tempRules: [],
+          resources: [],
           traffic: null,
           connections: [],
           profiles: [],
@@ -181,6 +197,57 @@ export const useApp = create<AppState>((set, get) => ({
     await guarded(set, async () => {
       const r = await window.surge.surge.run("dumpRule");
       set({ rules: parseRules(r.stdout) });
+    });
+  },
+
+  async refreshTempRules() {
+    try {
+      const r = await window.surge.surge.run("dumpTempRule");
+      set({ tempRules: parseTempRules(r.stdout) });
+    } catch {
+      set({ tempRules: [] });
+    }
+  },
+
+  async addTempRule(rule) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("addTempRule", [rule]);
+      await get().refreshTempRules();
+    });
+  },
+
+  async delTempRule(rule) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("delTempRule", [rule]);
+      await get().refreshTempRules();
+    });
+  },
+
+  async flushTempRules() {
+    await guarded(set, async () => {
+      await window.surge.surge.run("flushTempRule");
+      await get().refreshTempRules();
+    });
+  },
+
+  async refreshResources() {
+    await guarded(set, async () => {
+      const r = await window.surge.surge.run("externalResourceList");
+      set({ resources: parseExternalResources(r.stdout) });
+    });
+  },
+
+  async updateResource(key) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("externalResourceUpdate", [key]);
+      await get().refreshResources();
+    });
+  },
+
+  async updateAllResources() {
+    await guarded(set, async () => {
+      await window.surge.surge.run("externalResourceUpdateAll");
+      await get().refreshResources();
     });
   },
 

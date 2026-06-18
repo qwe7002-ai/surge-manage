@@ -1,6 +1,7 @@
 import type {
   ActiveConnection,
   Environment,
+  ExternalResource,
   LogLine,
   PolicyDump,
   PolicyTest,
@@ -193,6 +194,56 @@ export function parseRules(stdout: string): Rule[] {
       return undefined;
     })
     .filter((r): r is Rule => !!r);
+}
+
+/**
+ * Parse `surge --raw dump temp-rule` into raw rule strings. Each string is the
+ * exact rule line that `del-temp-rule <rule>` expects back. Tolerant of an
+ * array of strings, an array of {type,value,policy} objects, or plain text.
+ */
+export function parseTempRules(stdout: string): string[] {
+  const json = tryJson(stdout);
+  const arr = Array.isArray(json)
+    ? json
+    : Array.isArray(asRecord(json)?.["temp-rule"])
+      ? (asRecord(json)!["temp-rule"] as unknown[])
+      : undefined;
+  if (arr) {
+    return arr
+      .map((item) => {
+        if (typeof item === "string") return item;
+        const r = asRecord(item);
+        if (!r) return "";
+        const parts = [str(r.type), str(r.value) ?? str(r.pattern), str(r.policy)]
+          .filter((p): p is string => !!p);
+        return parts.join(",");
+      })
+      .filter((s) => s);
+  }
+  return stdout
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+}
+
+/** Parse `surge --raw external-resource list`. */
+export function parseExternalResources(stdout: string): ExternalResource[] {
+  const json = tryJson(stdout);
+  const list = Array.isArray(json)
+    ? json
+    : Array.isArray(asRecord(json)?.resources)
+      ? (asRecord(json)!.resources as unknown[])
+      : [];
+  return list
+    .map(asRecord)
+    .filter((r): r is Record<string, unknown> => !!r)
+    .map((r) => ({
+      key: str(r.key) ?? str(r.hash) ?? str(r.url) ?? "",
+      url: str(r.url),
+      ready: typeof r.ready === "boolean" ? r.ready : undefined,
+      updatedAt: num(r.updatedAt) ?? num(r.updated),
+    }))
+    .filter((r) => r.key);
 }
 
 /** Parse `surge --raw dump active` into a connection list. */

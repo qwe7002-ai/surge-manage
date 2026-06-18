@@ -45,6 +45,11 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       action: SurgeAction.dumpRequest, argv: ['--raw', 'dump', 'request'], mutates: false, arity: 0),
   SurgeAction.dumpDns: CommandSpec(
       action: SurgeAction.dumpDns, argv: ['--raw', 'dump', 'dns'], mutates: false, arity: 0),
+  SurgeAction.dumpTempRule: CommandSpec(
+      action: SurgeAction.dumpTempRule,
+      argv: ['--raw', 'dump', 'temp-rule'],
+      mutates: false,
+      arity: 0),
   SurgeAction.dumpProfileEffective: CommandSpec(
       action: SurgeAction.dumpProfileEffective,
       argv: ['dump', 'profile', 'effective'],
@@ -72,6 +77,38 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       arity: 0),
   SurgeAction.testGroup: CommandSpec(
       action: SurgeAction.testGroup, argv: ['test-group', '{0}'], mutates: true, arity: 1),
+  SurgeAction.testPolicyBandwidth: CommandSpec(
+      action: SurgeAction.testPolicyBandwidth,
+      argv: ['test-policy-bandwidth', '{0}', '{1}'],
+      mutates: false,
+      streaming: true,
+      arity: 2),
+  SurgeAction.addTempRule: CommandSpec(
+      action: SurgeAction.addTempRule, argv: ['add-temp-rule', '{0}'], mutates: true, arity: 1),
+  SurgeAction.delTempRule: CommandSpec(
+      action: SurgeAction.delTempRule, argv: ['del-temp-rule', '{0}'], mutates: true, arity: 1),
+  SurgeAction.updateTempRule: CommandSpec(
+      action: SurgeAction.updateTempRule,
+      argv: ['update-temp-rule', '{0}', '{1}'],
+      mutates: true,
+      arity: 2),
+  SurgeAction.flushTempRule: CommandSpec(
+      action: SurgeAction.flushTempRule, argv: ['flush-temp-rule'], mutates: true, arity: 0),
+  SurgeAction.externalResourceList: CommandSpec(
+      action: SurgeAction.externalResourceList,
+      argv: ['--raw', 'external-resource', 'list'],
+      mutates: false,
+      arity: 0),
+  SurgeAction.externalResourceUpdate: CommandSpec(
+      action: SurgeAction.externalResourceUpdate,
+      argv: ['external-resource', 'update', '{0}'],
+      mutates: true,
+      arity: 1),
+  SurgeAction.externalResourceUpdateAll: CommandSpec(
+      action: SurgeAction.externalResourceUpdateAll,
+      argv: ['external-resource', 'update', 'all'],
+      mutates: true,
+      arity: 0),
   SurgeAction.flushDns:
       CommandSpec(action: SurgeAction.flushDns, argv: ['flush', 'dns'], mutates: true, arity: 0),
   SurgeAction.diagnostics: CommandSpec(

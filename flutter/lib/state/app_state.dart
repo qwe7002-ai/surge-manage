@@ -20,6 +20,8 @@ class AppState extends ChangeNotifier {
   Map<String, List<String>> subPolicies = {};
   final Map<String, PolicyTest> policyTests = {};
   List<Rule> rules = [];
+  List<String> tempRules = [];
+  List<ExternalResource> resources = [];
   Traffic? traffic;
   List<ActiveConnection> connections = [];
   List<String> profiles = [];
@@ -109,6 +111,8 @@ class AppState extends ChangeNotifier {
         subPolicies = {};
         policyTests.clear();
         rules = [];
+        tempRules = [];
+        resources = [];
         traffic = null;
         connections = [];
         profiles = [];
@@ -175,6 +179,50 @@ class AppState extends ChangeNotifier {
   Future<void> refreshRules() => _guard(() async {
         final r = await _manager!.run(SurgeAction.dumpRule);
         rules = parseRules(r.stdout);
+      });
+
+  Future<void> refreshTempRules() async {
+    try {
+      final r = await _manager!.run(SurgeAction.dumpTempRule);
+      tempRules = parseTempRules(r.stdout);
+      notifyListeners();
+    } catch (_) {
+      tempRules = [];
+    }
+  }
+
+  Future<void> addTempRule(String rule) => _guard(() async {
+        await _manager!.run(SurgeAction.addTempRule, [rule]);
+        final r = await _manager!.run(SurgeAction.dumpTempRule);
+        tempRules = parseTempRules(r.stdout);
+      });
+
+  Future<void> delTempRule(String rule) => _guard(() async {
+        await _manager!.run(SurgeAction.delTempRule, [rule]);
+        final r = await _manager!.run(SurgeAction.dumpTempRule);
+        tempRules = parseTempRules(r.stdout);
+      });
+
+  Future<void> flushTempRules() => _guard(() async {
+        await _manager!.run(SurgeAction.flushTempRule);
+        tempRules = [];
+      });
+
+  Future<void> refreshResources() => _guard(() async {
+        final r = await _manager!.run(SurgeAction.externalResourceList);
+        resources = parseExternalResources(r.stdout);
+      });
+
+  Future<void> updateResource(String key) => _guard(() async {
+        await _manager!.run(SurgeAction.externalResourceUpdate, [key]);
+        final r = await _manager!.run(SurgeAction.externalResourceList);
+        resources = parseExternalResources(r.stdout);
+      });
+
+  Future<void> updateAllResources() => _guard(() async {
+        await _manager!.run(SurgeAction.externalResourceUpdateAll);
+        final r = await _manager!.run(SurgeAction.externalResourceList);
+        resources = parseExternalResources(r.stdout);
       });
 
   Future<void> refreshTraffic() async {

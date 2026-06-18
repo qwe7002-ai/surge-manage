@@ -4,6 +4,7 @@ import {
   FileText,
   ListTree,
   Network,
+  Package,
   Plug,
   ScrollText,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { DashboardPanel } from "@/components/panels/DashboardPanel";
 import { PoliciesPanel } from "@/components/panels/PoliciesPanel";
 import { RulesPanel } from "@/components/panels/RulesPanel";
 import { ConnectionsPanel } from "@/components/panels/ConnectionsPanel";
+import { ResourcesPanel } from "@/components/panels/ResourcesPanel";
 import { LogsPanel } from "@/components/panels/LogsPanel";
 import { ConfigPanel } from "@/components/panels/ConfigPanel";
 import { useApp } from "@/store/app-store";
@@ -60,6 +62,9 @@ export default function App() {
                   <TabsTrigger value="logs" disabled={!connected}>
                     <ScrollText /> Requests
                   </TabsTrigger>
+                  <TabsTrigger value="resources" disabled={!connected}>
+                    <Package /> Resources
+                  </TabsTrigger>
                   <TabsTrigger value="config" disabled={!connected}>
                     <FileText /> Config
                   </TabsTrigger>
@@ -81,6 +86,9 @@ export default function App() {
                 </TabsContent>
                 <TabsContent value="logs" className="mt-0 h-full">
                   <LogsPanel />
+                </TabsContent>
+                <TabsContent value="resources" className="mt-0 h-full">
+                  <ResourcesPanel />
                 </TabsContent>
                 <TabsContent value="config" className="mt-0">
                   <ConfigPanel />

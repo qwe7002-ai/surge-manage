@@ -18,6 +18,7 @@ enum SurgeAction {
   dumpActive,
   dumpRequest,
   dumpDns,
+  dumpTempRule,
   dumpProfileEffective,
   dumpProfileOriginal,
   watchRequest,
@@ -25,6 +26,14 @@ enum SurgeAction {
   testPolicy,
   testAllPolicies,
   testGroup,
+  testPolicyBandwidth,
+  addTempRule,
+  delTempRule,
+  updateTempRule,
+  flushTempRule,
+  externalResourceList,
+  externalResourceUpdate,
+  externalResourceUpdateAll,
   flushDns,
   diagnostics,
   kill,
@@ -238,6 +247,14 @@ class Rule {
   final String value;
   final String policy;
   final int? hits;
+}
+
+class ExternalResource {
+  const ExternalResource({required this.key, this.url, this.ready, this.updatedAt});
+  final String key;
+  final String? url;
+  final bool? ready;
+  final int? updatedAt;
 }
 
 class ActiveConnection {
