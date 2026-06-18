@@ -69,16 +69,16 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     streaming: true,
     arity: 0,
   },
-  // testing
+  // testing (--raw → JSON latency results)
   testNetwork: { action: "testNetwork", argv: ["test-network"], mutates: false, arity: 0 },
-  testPolicy: { action: "testPolicy", argv: ["test-policy", "{0}"], mutates: false, arity: 1 },
+  testPolicy: { action: "testPolicy", argv: ["--raw", "test-policy", "{0}"], mutates: false, arity: 1 },
   testAllPolicies: {
     action: "testAllPolicies",
-    argv: ["test-all-policies"],
+    argv: ["--raw", "test-all-policies"],
     mutates: false,
     arity: 0,
   },
-  testGroup: { action: "testGroup", argv: ["test-group", "{0}"], mutates: true, arity: 1 },
+  testGroup: { action: "testGroup", argv: ["--raw", "test-group", "{0}"], mutates: true, arity: 1 },
   testPolicyBandwidth: {
     action: "testPolicyBandwidth",
     argv: ["test-policy-bandwidth", "{0}", "{1}"], // <download|upload> <policy>

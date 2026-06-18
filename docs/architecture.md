@@ -75,7 +75,11 @@ Real `--raw` shapes (from the Surge CLI):
 ```jsonc
 // dump policy
 {"proxies":["UK","US",...],"policy-groups":["Relay","Apple",...]}
-// test-all-policies
+// dump rule  (each entry is a classic rule string)
+{"rules":["DOMAIN-SUFFIX,google.com,Proxy","GEOIP,CN,DIRECT","FINAL,Proxy"]}
+// dump active  (active requests live under a `requests` envelope; ids are numbers)
+{"requests":[{"id":42,"remoteAddress":"a:443","policyName":"HK","inBytes":1000,"outBytes":500}]}
+// test-all-policies  (NOTE: requires the `--raw` flag to emit JSON)
 {"UK":{"tcp":66,"receive":415,"available":69,"round-one-total":1055},
  "CA":{"error":"Socket closed by remote peer","available":0}}
 ```

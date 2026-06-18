@@ -163,37 +163,65 @@ export function parsePolicyTests(stdout: string): PolicyTest[] {
 }
 
 
+/**
+ * Parse one classic comma-separated rule line into a Rule.
+ *   "DOMAIN-SUFFIX,google.com,Proxy"  → matcher rule (type,value,policy)
+ *   "FINAL,Proxy"  /  "FINAL,Proxy,dns-failed"  → FINAL rule (no value)
+ * Trailing options (e.g. `no-resolve`, `dns-failed`) after the policy are kept
+ * out of the model.
+ */
+function parseRuleLine(line: string): Rule | undefined {
+  const parts = line.split(",").map((p) => p.trim());
+  const type = parts[0];
+  if (!type) return undefined;
+  // FINAL has no matcher value: the second token is the policy itself.
+  if (type === "FINAL") {
+    return parts[1] ? { type, value: "", policy: parts[1] } : undefined;
+  }
+  if (parts.length < 3) return undefined;
+  return { type, value: parts[1]!, policy: parts[2]! };
+}
+
+/**
+ * `surge --raw dump rule` → `{"rules":["DOMAIN-SUFFIX,google.com,Proxy", ...]}`
+ * (each entry is a classic rule string). Tolerant of a bare array, an array of
+ * `{type,value,policy}` objects, or plain newline-delimited text.
+ */
 export function parseRules(stdout: string): Rule[] {
   const json = tryJson(stdout);
-  if (Array.isArray(json)) {
-    return json
-      .map(asRecord)
-      .filter((r): r is Record<string, unknown> => !!r)
-      .map((r) => ({
-        type: str(r.type) ?? "",
-        value: str(r.value) ?? str(r.pattern) ?? "",
-        policy: str(r.policy) ?? str(r.target) ?? "",
-        hits: num(r.hits) ?? num(r.count),
-      }))
-      .filter((r) => r.type);
+  const arr = ruleArray(json);
+  if (arr) {
+    return arr
+      .map((item): Rule | undefined => {
+        if (typeof item === "string") return parseRuleLine(item);
+        const r = asRecord(item);
+        if (!r) return undefined;
+        const type = str(r.type) ?? "";
+        if (!type) return undefined;
+        return {
+          type,
+          value: str(r.value) ?? str(r.pattern) ?? "",
+          policy: str(r.policy) ?? str(r.target) ?? "",
+          hits: num(r.hits) ?? num(r.count),
+        };
+      })
+      .filter((r): r is Rule => !!r);
   }
-  // Fallback: parse classic comma-separated rule lines:
-  // "DOMAIN-SUFFIX,google.com,Proxy"
+  // Fallback: classic comma-separated rule lines, one per line.
   return stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#"))
-    .map((line) => {
-      const parts = line.split(",").map((p) => p.trim());
-      if (parts.length >= 3) {
-        return { type: parts[0]!, value: parts[1]!, policy: parts[2]! };
-      }
-      if (parts.length === 2 && parts[0] === "FINAL") {
-        return { type: "FINAL", value: "", policy: parts[1]! };
-      }
-      return undefined;
-    })
+    .map(parseRuleLine)
     .filter((r): r is Rule => !!r);
+}
+
+/** Extract the rule array from a bare array or a `{ "rules": [...] }` envelope. */
+function ruleArray(json: unknown): unknown[] | undefined {
+  if (Array.isArray(json)) return json;
+  const rec = asRecord(json);
+  if (rec && Array.isArray(rec.rules)) return rec.rules as unknown[];
+  return undefined;
 }
 
 /**
@@ -246,23 +274,32 @@ export function parseExternalResources(stdout: string): ExternalResource[] {
     .filter((r) => r.key);
 }
 
-/** Parse `surge --raw dump active` into a connection list. */
+/**
+ * Parse `surge --raw dump active` into a connection list. Surge returns the
+ * active requests under a `requests` envelope (`{"requests":[...]}`); older/forked
+ * shapes use `connections` or a bare array — all are accepted.
+ */
 export function parseActive(stdout: string): ActiveConnection[] {
   const json = tryJson(stdout);
+  const rec = asRecord(json);
   const list = Array.isArray(json)
     ? json
-    : Array.isArray(asRecord(json)?.connections)
-      ? (asRecord(json)!.connections as unknown[])
-      : [];
+    : Array.isArray(rec?.requests)
+      ? (rec!.requests as unknown[])
+      : Array.isArray(rec?.connections)
+        ? (rec!.connections as unknown[])
+        : [];
   return list
     .map(asRecord)
     .filter((c): c is Record<string, unknown> => !!c)
     .map((c, i) => ({
-      id: str(c.id) ?? str(c.connectionId) ?? String(i),
+      // Surge request ids are numbers; keep them as strings for `kill <id>`.
+      id: idStr(c.id) ?? idStr(c.connectionId) ?? String(i),
       remote:
         str(c.remoteAddress) ??
         str(c.remote) ??
         str(c.host) ??
+        str(c.URL) ??
         str(c.url) ??
         "—",
       policy: str(c.policyName) ?? str(c.policy) ?? str(c.proxy),
@@ -271,6 +308,12 @@ export function parseActive(stdout: string): ActiveConnection[] {
       downloadBytes: num(c.inBytes) ?? num(c.downloadBytes) ?? num(c.download),
       raw: c,
     }));
+}
+
+/** Coerce a string-or-number id into a string (Surge uses numeric ids). */
+function idStr(v: unknown): string | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return str(v);
 }
 
 /** Aggregate `dump active` connections into totals for the dashboard. */

@@ -71,12 +71,21 @@ export function PoliciesPanel() {
           )}
           {groups.map((g) => {
             const members = subPolicies[g] ?? [];
+            // When a group's sub-policies aren't known, still let the user point
+            // the group at any proxy or other group so the selection is editable.
+            const fallback = [...proxies, ...groups.filter((x) => x !== g)];
+            const candidates = members.length > 0 ? members : fallback;
+            // Ensure the current selection is always an option, even if unlisted.
+            const options =
+              selection[g] && !candidates.includes(selection[g])
+                ? [selection[g], ...candidates]
+                : candidates;
             return (
               <div key={g} className="flex items-center gap-1.5">
                 <span className="w-28 shrink-0 truncate text-sm" title={g}>
                   {g}
                 </span>
-                {members.length > 0 ? (
+                {options.length > 0 ? (
                   <Select
                     value={selection[g] ?? undefined}
                     disabled={busy}
@@ -86,7 +95,7 @@ export function PoliciesPanel() {
                       <SelectValue placeholder="select…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {members.map((m) => (
+                      {options.map((m) => (
                         <SelectItem key={m} value={m}>
                           {m}
                         </SelectItem>

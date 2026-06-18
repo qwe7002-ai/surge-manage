@@ -89,6 +89,20 @@ test("parseRules parses json and csv fallback", () => {
   assert.equal(csv[1]!.type, "FINAL");
 });
 
+test("parseRules reads the {rules:[...]} envelope of rule strings", () => {
+  const rules = parseRules(
+    '{"rules":["DOMAIN-SUFFIX,google.com,Proxy","GEOIP,CN,DIRECT","FINAL,Proxy,dns-failed"]}',
+  );
+  assert.equal(rules.length, 3);
+  assert.equal(rules[0]!.type, "DOMAIN-SUFFIX");
+  assert.equal(rules[0]!.value, "google.com");
+  assert.equal(rules[0]!.policy, "Proxy");
+  // FINAL has no matcher value: the token after FINAL is the policy.
+  assert.equal(rules[2]!.type, "FINAL");
+  assert.equal(rules[2]!.value, "");
+  assert.equal(rules[2]!.policy, "Proxy");
+});
+
 test("parseTempRules handles strings, objects, and text", () => {
   assert.deepEqual(parseTempRules('["DOMAIN,a.com,Proxy"]'), ["DOMAIN,a.com,Proxy"]);
   assert.deepEqual(
@@ -133,4 +147,15 @@ test("parseActive + aggregateTraffic", () => {
   assert.equal(t.connections, 2);
   assert.equal(t.downloadTotal, 3000);
   assert.equal(t.uploadTotal, 600);
+});
+
+test("parseActive reads Surge {requests:[...]} envelope with numeric ids", () => {
+  const conns = parseActive(
+    '{"requests":[{"id":42,"remoteAddress":"a:443","policyName":"HK",' +
+      '"inBytes":1000,"outBytes":500}]}',
+  );
+  assert.equal(conns.length, 1);
+  assert.equal(conns[0]!.id, "42"); // numeric id coerced to string for `kill`
+  assert.equal(conns[0]!.policy, "HK");
+  assert.equal(conns[0]!.downloadBytes, 1000);
 });
