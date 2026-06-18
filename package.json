@@ -1,0 +1,17 @@
+{
+  "name": "surge-manage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote management client for the Surge CLI over mosh",
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm --filter @surge-manage/shared build && pnpm --filter @surge-manage/electron build",
+    "dev": "pnpm --filter @surge-manage/electron dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

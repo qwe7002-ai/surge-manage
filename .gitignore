@@ -1,0 +1,41 @@
+# Node
+node_modules/
+dist/
+out/
+.vite/
+*.tsbuildinfo
+*.log
+
+# Stray npm lockfiles (this repo uses pnpm)
+packages/*/package-lock.json
+npm-debug.log*
+pnpm-debug.log*
+
+# Electron build output
+electron/release/
+electron/dist-electron/
+
+# Flutter / Dart
+flutter/.dart_tool/
+flutter/.flutter-plugins
+flutter/.flutter-plugins-dependencies
+flutter/build/
+flutter/.pub-cache/
+flutter/.pub/
+flutter/ios/Pods/
+flutter/android/.gradle/
+flutter/android/local.properties
+flutter/**/GeneratedPluginRegistrant.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Secrets / local config
+*.local
+.env
+.env.*
+!.env.example
