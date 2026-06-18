@@ -68,15 +68,22 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       arity: 0),
   SurgeAction.testNetwork: CommandSpec(
       action: SurgeAction.testNetwork, argv: ['test-network'], mutates: false, arity: 0),
+  // test-* need --raw to emit JSON latency results.
   SurgeAction.testPolicy: CommandSpec(
-      action: SurgeAction.testPolicy, argv: ['test-policy', '{0}'], mutates: false, arity: 1),
+      action: SurgeAction.testPolicy,
+      argv: ['--raw', 'test-policy', '{0}'],
+      mutates: false,
+      arity: 1),
   SurgeAction.testAllPolicies: CommandSpec(
       action: SurgeAction.testAllPolicies,
-      argv: ['test-all-policies'],
+      argv: ['--raw', 'test-all-policies'],
       mutates: false,
       arity: 0),
   SurgeAction.testGroup: CommandSpec(
-      action: SurgeAction.testGroup, argv: ['test-group', '{0}'], mutates: true, arity: 1),
+      action: SurgeAction.testGroup,
+      argv: ['--raw', 'test-group', '{0}'],
+      mutates: true,
+      arity: 1),
   SurgeAction.testPolicyBandwidth: CommandSpec(
       action: SurgeAction.testPolicyBandwidth,
       argv: ['test-policy-bandwidth', '{0}', '{1}'],

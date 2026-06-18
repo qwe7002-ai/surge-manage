@@ -56,7 +56,13 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
               for (final g in groups)
                 _GroupRow(
                   group: g,
-                  members: state.subPolicies[g] ?? const [],
+                  candidates: _candidatesFor(
+                    group: g,
+                    members: state.subPolicies[g] ?? const [],
+                    proxies: proxies,
+                    groups: groups,
+                    selected: state.environment?.selection[g],
+                  ),
                   selected: state.environment?.selection[g],
                   busy: state.busy,
                   onSelect: (p) => state.selectPolicy(g, p),
@@ -80,10 +86,29 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
   }
 }
 
+/// Candidate nodes for a group's selector. Prefer the group's known
+/// sub-policies; when unknown, fall back to all proxies and other groups so the
+/// selection is always editable. The current selection is always included.
+List<String> _candidatesFor({
+  required String group,
+  required List<String> members,
+  required List<String> proxies,
+  required List<String> groups,
+  required String? selected,
+}) {
+  final base = members.isNotEmpty
+      ? members
+      : [...proxies, ...groups.where((x) => x != group)];
+  if (selected != null && !base.contains(selected)) {
+    return [selected, ...base];
+  }
+  return base;
+}
+
 class _GroupRow extends StatelessWidget {
   const _GroupRow({
     required this.group,
-    required this.members,
+    required this.candidates,
     required this.selected,
     required this.busy,
     required this.onSelect,
@@ -91,7 +116,7 @@ class _GroupRow extends StatelessWidget {
   });
 
   final String group;
-  final List<String> members;
+  final List<String> candidates;
   final String? selected;
   final bool busy;
   final ValueChanged<String> onSelect;
@@ -108,14 +133,14 @@ class _GroupRow extends StatelessWidget {
             child: Text(group, overflow: TextOverflow.ellipsis),
           ),
           Expanded(
-            child: members.isEmpty
+            child: candidates.isEmpty
                 ? Text(selected ?? '—',
                     style: const TextStyle(color: Colors.white54, fontSize: 13))
                 : DropdownButton<String>(
                     isExpanded: true,
-                    value: members.contains(selected) ? selected : null,
+                    value: candidates.contains(selected) ? selected : null,
                     hint: const Text('select…'),
-                    items: members
+                    items: candidates
                         .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                         .toList(),
                     onChanged: busy ? null : (m) => m != null ? onSelect(m) : null,

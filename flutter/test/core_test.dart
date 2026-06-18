@@ -66,4 +66,37 @@ void main() {
     expect(t.downloadTotal, 3000);
     expect(t.uploadTotal, 600);
   });
+
+  test('parseActive reads Surge {requests:[...]} envelope with numeric ids', () {
+    final conns = parseActive(
+      '{"requests":[{"id":42,"remoteAddress":"a:443","policyName":"HK",'
+      '"inBytes":1000,"outBytes":500}]}',
+    );
+    expect(conns.length, 1);
+    expect(conns[0].id, '42');
+    expect(conns[0].policy, 'HK');
+    expect(conns[0].downloadBytes, 1000);
+  });
+
+  test('parseRules reads the {rules:[...]} envelope of rule strings', () {
+    final rules = parseRules(
+      '{"rules":["DOMAIN-SUFFIX,google.com,Proxy","GEOIP,CN,DIRECT",'
+      '"FINAL,Proxy,dns-failed"]}',
+    );
+    expect(rules.length, 3);
+    expect(rules[0].type, 'DOMAIN-SUFFIX');
+    expect(rules[0].value, 'google.com');
+    expect(rules[0].policy, 'Proxy');
+    // FINAL has no matcher value: the token after FINAL is the policy.
+    expect(rules[2].type, 'FINAL');
+    expect(rules[2].value, '');
+    expect(rules[2].policy, 'Proxy');
+  });
+
+  test('buildCommandLine adds --raw to test commands', () {
+    expect(buildCommandLine(profile, SurgeAction.testAllPolicies),
+        'surge-cli --raw test-all-policies');
+    expect(buildCommandLine(profile, SurgeAction.testPolicy, ['HK']),
+        'surge-cli --raw test-policy HK');
+  });
 }
