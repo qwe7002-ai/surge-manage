@@ -3,6 +3,7 @@ import type { Client, ClientChannel } from "ssh2";
 import {
   buildCommandLine,
   buildListProfilesCommand,
+  DEFAULT_CONFIG_DIR,
   parseLogLine,
   parseProfiles,
   type CommandResult,
@@ -122,8 +123,7 @@ export class ConnectionManager extends EventEmitter {
   /** List `*.conf` profiles in the host's configured config directory. */
   async listProfiles(): Promise<string[]> {
     if (!this.client || !this.current) throw new Error("Not connected");
-    const dir = this.current.configDir;
-    if (!dir) return [];
+    const dir = this.current.configDir?.trim() || DEFAULT_CONFIG_DIR;
     const { stdout } = await exec(this.client, buildListProfilesCommand(dir));
     return parseProfiles(stdout);
   }

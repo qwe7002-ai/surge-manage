@@ -52,6 +52,13 @@ export const DEFAULT_SURGE_BIN =
   "/Applications/Surge.app/Contents/Applications/surge-cli";
 
 /**
+ * Default Surge profile directory (macOS). Used when a host doesn't specify its
+ * own `configDir`, so profile listing/editing still works out of the box.
+ */
+export const DEFAULT_CONFIG_DIR =
+  "~/Library/Application Support/Surge/Profiles";
+
+/**
  * Actions map 1:1 onto real Surge CLI commands (see the CLI reference). Query
  * actions are run with the global `--raw` flag for JSON output; `watchRequest`
  * is the only streaming command.

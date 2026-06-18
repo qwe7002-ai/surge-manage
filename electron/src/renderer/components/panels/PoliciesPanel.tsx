@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Gauge, RefreshCw, Repeat } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Gauge, Pencil, RefreshCw, Repeat } from "lucide-react";
 import type { PolicyTest } from "@surge-manage/shared";
 import {
   Card,
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Disconnected } from "@/components/Disconnected";
+import { SectionEditor } from "@/components/SectionEditor";
 import { useApp } from "@/store/app-store";
 
 export function PoliciesPanel() {
@@ -27,13 +28,18 @@ export function PoliciesPanel() {
   const policyTests = useApp((s) => s.policyTests);
   const busy = useApp((s) => s.busy);
   const refreshPolicies = useApp((s) => s.refreshPolicies);
+  const refreshProfiles = useApp((s) => s.refreshProfiles);
   const testAllPolicies = useApp((s) => s.testAllPolicies);
   const testGroup = useApp((s) => s.testGroup);
   const selectPolicy = useApp((s) => s.selectPolicy);
+  const [editingProxies, setEditingProxies] = useState(false);
 
   useEffect(() => {
-    if (connected) void refreshPolicies();
-  }, [connected, refreshPolicies]);
+    if (connected) {
+      void refreshPolicies();
+      void refreshProfiles();
+    }
+  }, [connected, refreshPolicies, refreshProfiles]);
 
   if (!connected) return <Disconnected />;
 
@@ -125,12 +131,30 @@ export function PoliciesPanel() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Proxies</CardTitle>
+          <CardTitle className="flex items-center justify-between text-sm">
+            Proxies
+            <Button
+              size="sm"
+              variant={editingProxies ? "secondary" : "ghost"}
+              className="h-7"
+              onClick={() => setEditingProxies((v) => !v)}
+            >
+              <Pencil /> {editingProxies ? "Done" : "Edit"}
+            </Button>
+          </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-1.5 sm:grid-cols-2">
-          {proxies.map((p) => (
-            <ProxyRow key={p} name={p} test={policyTests[p]} />
-          ))}
+        <CardContent className={editingProxies ? "" : "grid gap-1.5 sm:grid-cols-2"}>
+          {editingProxies ? (
+            <div className="h-[420px]">
+              <SectionEditor
+                section="Proxy"
+                placeholder="MyNode = vmess, server.com, 443, username=uuid, …"
+                hint="Edits the [Proxy] section of the selected profile, then reloads Surge."
+              />
+            </div>
+          ) : (
+            proxies.map((p) => <ProxyRow key={p} name={p} test={policyTests[p]} />)
+          )}
         </CardContent>
       </Card>
     </div>

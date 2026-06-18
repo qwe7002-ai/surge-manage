@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import {
   aggregateTraffic,
+  DEFAULT_CONFIG_DIR,
   getSectionEntries,
   parseConfigDocument,
+  parseConfigProxies,
   serializeConfigDocument,
   setSectionEntries,
   parseActive,
@@ -208,11 +210,19 @@ export const useApp = create<AppState>((set, get) => ({
         window.surge.surge.run("dumpProfileOriginal").catch(() => null),
       ]);
       const fromDump = subs ? parseSubPolicies(subs.stdout) : {};
-      const fromConfig = cfg ? parseProxyGroups(cfg.stdout) : {};
+      const cfgText = cfg?.stdout ?? "";
+      const cfgGroups = cfg ? parseProxyGroups(cfgText) : {};
+      const cfgProxies = cfg ? parseConfigProxies(cfgText) : [];
+      const dumped = parsePolicies(dump.stdout);
+      // Prefer dump's live names, but fall back to the config when dump is empty
+      // (some Surge builds return nothing for `dump policy`).
       set({
-        policies: parsePolicies(dump.stdout),
+        policies: {
+          proxies: dumped.proxies.length ? dumped.proxies : cfgProxies,
+          groups: dumped.groups.length ? dumped.groups : Object.keys(cfgGroups),
+        },
         // Config-derived members win; dump fills any gaps.
-        subPolicies: { ...fromDump, ...fromConfig },
+        subPolicies: { ...fromDump, ...cfgGroups },
       });
       // Selection lives in the environment dictionary.
       await get().refreshEnvironment();
@@ -430,10 +440,8 @@ type GetFn = () => AppState;
 /** Build the remote profile path: `<configDir>/<profile>.conf`. */
 function profilePath(get: GetFn, profile: string): string {
   const host = get().hosts.find((h) => h.id === get().selectedHostId);
-  const dir = host?.configDir?.trim();
-  if (!dir) {
-    throw new Error("Set the host's config directory to edit profiles");
-  }
+  // Fall back to Surge's default profile directory when the host omits one.
+  const dir = host?.configDir?.trim() || DEFAULT_CONFIG_DIR;
   return `${dir.replace(/\/+$/, "")}/${profile}.conf`;
 }
 
