@@ -9,6 +9,10 @@
     "email": "noreply@example.com"
   },
   "homepage": "https://github.com/qwe7002-ai/surge-manage",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qwe7002-ai/surge-manage.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

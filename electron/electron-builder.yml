@@ -29,6 +29,15 @@ npmRebuild: true
 electronLanguages:
   - en
 
+# Explicit publish target so electron-builder can compute update-channel names
+# even under `--publish never` (avoids a null-channel crash when it can't infer
+# the repo from .git/config in CI). Distribution still happens via the CI
+# upload-artifact / release steps, not electron-builder's own publisher.
+publish:
+  provider: github
+  owner: qwe7002-ai
+  repo: surge-manage
+
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.png
