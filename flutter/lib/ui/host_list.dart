@@ -86,9 +86,7 @@ class _HostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connecting =
-        state.connection.phase == ConnectionPhase.sshConnecting ||
-            state.connection.phase == ConnectionPhase.moshBootstrapping;
+    final connecting = state.connection.phase == ConnectionPhase.connecting;
     return FCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

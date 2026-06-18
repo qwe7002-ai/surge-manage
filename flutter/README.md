@@ -1,9 +1,9 @@
 # Surge Manage — mobile (Flutter)
 
 The mobile client mirrors the desktop app: it manages a remote `surge` daemon
-over a mosh session and presents everything as a **GUI** — it never exposes a
-raw shell. Built with [forui](https://forui.dev) (a shadcn-style component
-library for Flutter).
+over **SSH** and presents everything as a **GUI** — it never exposes a raw
+shell. Built with [forui](https://forui.dev) (a shadcn-style component library
+for Flutter).
 
 ## Run
 
@@ -22,11 +22,8 @@ lib/
 │   ├── types.dart            # domain model
 │   ├── commands.dart         # surge command catalog + safe command builder
 │   ├── parsers.dart          # output → domain models
-│   ├── channel.dart          # TerminalChannel abstraction
-│   ├── runner.dart           # sentinel-framed structured command runner
-│   ├── ssh.dart              # dartssh2 bootstrap + SSH-shell fallback channel
-│   ├── mosh/mosh_client.dart # native mosh transport bridge (platform channel)
-│   ├── connection.dart       # connection lifecycle orchestration
+│   ├── ssh.dart              # dartssh2 connect + exec helpers
+│   ├── connection.dart       # connection lifecycle, runs surge via SSH exec
 │   └── secure_store.dart     # hosts + secrets in platform secure storage
 ├── state/app_state.dart      # ChangeNotifier app state (provider)
 └── ui/
@@ -35,14 +32,12 @@ lib/
     └── panels/               # dashboard, policies, rules, logs, config
 ```
 
-## Transport note (mosh on mobile)
+## Transport
 
-mosh's UDP State-Synchronization Protocol needs a native client. The production
-path is a platform channel to a bundled `mosh-client` (Android NDK / iOS
-libmosh), defined in `core/mosh/mosh_client.dart`. Until that native side is
-wired up (`TODO(live)`), the app falls back to an interactive SSH shell as the
-transport — the structured-command runner and the entire GUI behave identically
-either way; only roaming resilience differs.
+The app connects over SSH (`dartssh2`) and runs each `surge` subcommand with
+`SSHClient.execute`, which yields clean stdout and an exit code per command — no
+PTY, no output framing. Live logs use a long-lived `surge log --follow` exec
+session whose stdout is parsed line-by-line.
 
 ## Keeping parity with the desktop client
 

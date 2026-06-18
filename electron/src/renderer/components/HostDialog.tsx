@@ -109,7 +109,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
         <DialogHeader>
           <DialogTitle>{initial ? "Edit host" : "Add host"}</DialogTitle>
           <DialogDescription>
-            Surge Manage connects over SSH to bootstrap a roaming mosh session.
+            Surge Manage connects over SSH and runs the surge CLI on this host.
           </DialogDescription>
         </DialogHeader>
 

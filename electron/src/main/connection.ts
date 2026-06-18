@@ -1,37 +1,31 @@
 import { EventEmitter } from "node:events";
+import type { Client, ClientChannel } from "ssh2";
 import {
   buildCommandLine,
-  CommandRunner,
   parseLogLine,
   type CommandResult,
   type ConnectionState,
   type HostConfig,
-  type LogLine,
   type SurgeAction,
 } from "@surge-manage/shared";
-import { bootstrapMosh } from "./ssh";
-import { MoshSession } from "./pty";
+import { connectSsh, exec, execStream } from "./ssh";
 
 /**
- * Owns the lifecycle of a single active connection: SSH→mosh bootstrap, the
- * mosh PTY session, and the structured command runner layered on top.
- *
- * The mosh PTY is an INTERNAL transport — its raw bytes are never forwarded to
- * the renderer. The UI only ever receives structured results (via `run`) and
- * parsed log lines (via the "log" event).
+ * Owns the lifecycle of a single SSH connection and runs structured `surge`
+ * commands over it via `exec` (clean stdout + exit code per command — no PTY,
+ * no framing). The SSH stream is internal; the UI only receives structured
+ * results (via `run`) and parsed log lines (via the "log" event). No raw shell
+ * is ever exposed.
  *
  * Emits:
  *   - "state"  (ConnectionState)
  *   - "log"    (LogLine)  parsed lines from a streaming `surge log --follow`
  */
 export class ConnectionManager extends EventEmitter {
-  private session: MoshSession | null = null;
-  private runner: CommandRunner | null = null;
+  private client: Client | null = null;
   private current: HostConfig | null = null;
+  private logChannel: ClientChannel | null = null;
   private state: ConnectionState = { phase: "disconnected", since: Date.now() };
-  private logStreaming = false;
-  private logUnsub: (() => void) | null = null;
-  private logBuffer = "";
 
   getState(): ConnectionState {
     return this.state;
@@ -43,30 +37,24 @@ export class ConnectionManager extends EventEmitter {
   }
 
   async connect(host: HostConfig): Promise<void> {
-    if (this.session) await this.disconnect();
+    if (this.client) await this.disconnect();
     this.current = host;
-    this.setState({ phase: "sshConnecting", hostId: host.id, error: undefined });
+    this.setState({ phase: "connecting", hostId: host.id, error: undefined });
 
     try {
-      this.setState({ phase: "moshBootstrapping" });
-      const handshake = await bootstrapMosh(host);
-
-      const session = new MoshSession(handshake);
-      session.onExit((code) => {
+      const client = await connectSsh(host);
+      client.on("close", () => {
         if (this.state.phase === "connected") {
-          this.setState({
-            phase: "error",
-            error: `mosh-client exited (code ${code})`,
-          });
+          this.setState({ phase: "error", error: "SSH connection closed" });
         }
         this.cleanup();
       });
-
-      this.session = session;
-      this.runner = new CommandRunner(session, host.surge);
-
-      // Give the remote shell a beat to print its prompt, then mark connected.
-      await delay(400);
+      client.on("error", (err) => {
+        if (this.state.phase === "connected") {
+          this.setState({ phase: "error", error: err.message });
+        }
+      });
+      this.client = client;
       this.setState({ phase: "connected" });
     } catch (err) {
       this.setState({ phase: "error", error: errMessage(err) });
@@ -80,63 +68,56 @@ export class ConnectionManager extends EventEmitter {
     this.setState({ phase: "disconnected", hostId: undefined, error: undefined });
   }
 
-  /** Run a structured surge action via the sentinel-framed runner. */
+  /** Run a structured surge action over SSH exec. */
   async run(action: SurgeAction, args: string[] = []): Promise<CommandResult> {
-    if (!this.runner) throw new Error("Not connected");
-    if (this.logStreaming) {
-      throw new Error("Stop the log stream before running other actions");
-    }
-    return this.runner.run(action, args);
+    if (!this.client || !this.current) throw new Error("Not connected");
+    const commandLine = buildCommandLine(this.current.surge, action, args);
+    const started = Date.now();
+    const { stdout, stderr, code } = await exec(this.client, commandLine);
+    return {
+      action,
+      exitCode: code,
+      // surge sometimes writes useful output to stderr; include it when stdout is empty.
+      stdout: stdout || stderr,
+      durationMs: Date.now() - started,
+    };
   }
 
-  /**
-   * Stream `surge log --follow` from the PTY, parsing each line into a LogLine
-   * and emitting it. The follow command occupies the channel, so structured
-   * commands are blocked until {@link stopLogs} is called. The renderer drives
-   * this from the Logs tab lifecycle — the user never sees raw shell output.
-   */
-  startLogs(): void {
-    if (!this.session || !this.current || this.logStreaming) return;
-    this.logStreaming = true;
-    this.logBuffer = "";
-    this.logUnsub = this.session.onData((chunk) => this.onLogChunk(chunk));
+  /** Stream `surge log --follow`, emitting parsed LogLine events. */
+  async startLogs(): Promise<void> {
+    if (!this.client || !this.current || this.logChannel) return;
     const cmd = buildCommandLine(this.current.surge, "logsTail");
-    this.session.write(`${cmd}\n`);
+    this.logChannel = await execStream(this.client, cmd, (line) => {
+      this.emit("log", parseLogLine(line));
+    });
+    this.logChannel.on("close", () => {
+      this.logChannel = null;
+    });
   }
 
   stopLogs(): void {
-    if (!this.logStreaming || !this.session) return;
-    this.logStreaming = false;
-    this.logUnsub?.();
-    this.logUnsub = null;
-    // Ctrl-C to interrupt `--follow`, then a newline to restore the prompt.
-    this.session.write("\x03\n");
-    this.logBuffer = "";
-  }
-
-  private onLogChunk(chunk: string): void {
-    this.logBuffer += chunk;
-    const lines = this.logBuffer.split(/\r?\n/);
-    this.logBuffer = lines.pop() ?? "";
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line) continue;
-      const parsed: LogLine = parseLogLine(line);
-      this.emit("log", parsed);
+    if (!this.logChannel) return;
+    // Closing the channel sends EOF/kills the remote `--follow`.
+    try {
+      this.logChannel.close();
+      this.logChannel.signal("INT");
+    } catch {
+      /* channel already gone */
     }
+    this.logChannel = null;
   }
 
   private cleanup(): void {
     this.stopLogs();
-    this.runner?.dispose();
-    this.runner = null;
-    this.session?.dispose();
-    this.session = null;
+    if (this.client) {
+      try {
+        this.client.end();
+      } catch {
+        /* already closed */
+      }
+    }
+    this.client = null;
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 function errMessage(e: unknown): string {

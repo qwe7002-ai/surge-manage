@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 
 const PHASE_LABEL: Record<ConnectionPhase, string> = {
   disconnected: "Disconnected",
-  sshConnecting: "SSH connecting…",
-  moshBootstrapping: "Starting mosh session…",
+  connecting: "Connecting…",
   connected: "Connected",
   error: "Error",
 };
@@ -17,7 +16,7 @@ export function StatusBar() {
   const busy = useApp((s) => s.busy);
 
   const phase = connection.phase;
-  const inProgress = phase === "sshConnecting" || phase === "moshBootstrapping";
+  const inProgress = phase === "connecting";
 
   return (
     <footer className="flex h-7 shrink-0 items-center gap-2 border-t bg-card/40 px-3 text-xs text-muted-foreground">
@@ -50,7 +49,7 @@ export function StatusBar() {
 function PhaseIcon({ phase }: { phase: ConnectionPhase }) {
   if (phase === "connected") return <Wifi className="h-3.5 w-3.5 text-emerald-500" />;
   if (phase === "error") return <AlertCircle className="h-3.5 w-3.5 text-destructive" />;
-  if (phase === "sshConnecting" || phase === "moshBootstrapping")
+  if (phase === "connecting")
     return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
   return <WifiOff className="h-3.5 w-3.5" />;
 }

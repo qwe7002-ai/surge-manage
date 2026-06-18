@@ -4,7 +4,7 @@ Surge Manage is a remote control panel for a `surge` daemon running on a Linux/m
 It is split into three layers that are reused (conceptually) across both the desktop and
 mobile clients.
 
-> **GUI-only.** No raw terminal is shown to the user on either platform. The mosh session
+> **GUI-only.** No raw terminal is shown to the user on either platform. The SSH connection
 > is an internal transport; the UI renders only parsed, structured data.
 
 ```
@@ -14,68 +14,34 @@ mobile clients.
 │   • Flutter: forui (shadcn-style)                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │  Orchestration                                                     │
-│   • Connection lifecycle (SSH bootstrap → mosh session)            │
-│   • Structured command runner (sentinel-framed exec)               │
+│   • Connection lifecycle (SSH connect / disconnect)                │
+│   • Per-command exec + output parsing                              │
 │   • Surge command catalog + output parsers                         │
 ├──────────────────────────────────────────────────────────────────┤
 │  Transport                                                         │
-│   • SSH (ssh2 / dartssh2)  — auth + mosh-server bootstrap          │
-│   • mosh  (mosh-client via node-pty / Dart mosh client)            │
+│   • SSH (ssh2 / dartssh2) — auth + per-command exec + log stream   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## 1. Transport: SSH → mosh bootstrap
+## 1. Transport: SSH
 
-mosh cannot establish a session on its own; it needs an authenticated SSH login to start
-`mosh-server` on the remote and hand back a one-time key. The sequence:
+The client opens one authenticated SSH connection per host (key / password / agent) and
+keeps it open for the session:
 
-1. Open SSH (key-based preferred; password supported) to `user@host:port`.
-2. Exec:
-   ```
-   mosh-server new -s -c 256 -l LANG=en_US.UTF-8
-   ```
-   This prints, on success:
-   ```
-   MOSH CONNECT 60001 4NeCCgvZFe2RnPgrcU1PQw
-   ```
-   (`60001` = chosen UDP port in the mosh port range, second token = base64 session key).
-3. Close the SSH exec channel (mosh-server daemonizes).
-4. Launch the local mosh client against the host's UDP port:
-   ```
-   MOSH_KEY=4NeCCgvZFe2RnPgrcU1PQw mosh-client <host-ip> 60001
-   ```
-   - **Desktop:** spawn the system `mosh-client` binary inside a PTY (`node-pty`).
-   - **Mobile:** a native mosh client behind a platform channel (`flutter/lib/core/mosh/`);
-     falls back to an SSH interactive shell until the native side is bundled.
+1. Open SSH to `user@host:port`.
+2. For each management action, run a **one-shot `exec`** of the resolved command line
+   (`surge status --json`, `surge policy select …`). SSH `exec` returns the command's stdout,
+   stderr, and exit code natively — no PTY and no output framing are needed.
+3. For live logs, open a **long-lived `exec`** of `surge log --follow` and parse its stdout
+   stream line-by-line; closing the channel (and sending `SIGINT`) stops it.
 
-The UDP session survives IP changes and susp/resume — that's the whole point of mosh. Its
-raw bytes are consumed only by the command runner (below); they are **never forwarded to the
-renderer/UI**, so the user never sees a shell.
+The SSH byte stream is consumed only by the orchestration layer; it is **never forwarded to
+the renderer/UI**, so the user never sees a shell.
 
-### Why SSH is still in the picture
+Implementation: `electron/src/main/ssh.ts` (node `ssh2`) and `flutter/lib/core/ssh.dart`
+(`dartssh2`). Each exposes `connectSsh`, `exec`, and a streaming helper.
 
-SSH is only used for the *bootstrap* and (optionally) as a reliable side-channel for
-structured commands when an interactive mosh terminal is not desired. The long-lived
-management session is mosh.
-
-## 2. Structured command runner (sentinel framing)
-
-A mosh/PTY session is a stream of bytes meant for a human terminal — there is no built-in
-request/response framing. To run `surge` subcommands and reliably capture their output and
-exit code, we wrap each command:
-
-```
-printf '\n__SM_BEGIN__ %s\n' "$ID"; <command>; printf '\n__SM_END__ %s %s\n' "$ID" "$?"
-```
-
-The runner watches the output stream for `__SM_BEGIN__ <id>` and `__SM_END__ <id> <code>`
-and returns everything in between as the command result. Concurrent commands are serialized
-through a queue so markers never interleave. See:
-
-- TS: `packages/shared/src/runner.ts`
-- Dart: `flutter/lib/core/runner.dart`
-
-## 3. Surge command catalog
+## 2. Surge command catalog
 
 A single declarative catalog describes every management action: its argv template, whether
 it mutates state, and the parser for its output. This keeps both clients' feature sets
@@ -105,30 +71,31 @@ identical and makes adding a command a one-liner.
 The catalog is defined once in `packages/shared/src/commands.ts` and mirrored in
 `flutter/lib/core/commands.dart`.
 
-## 4. State & data model
+## 3. State & data model
 
 Core entities (see `packages/shared/src/types.ts`):
 
 - **HostConfig** — id, label, host, port, username, auth method, surge profile.
 - **SurgeProfile** — binary path + argv overrides for the command catalog.
-- **ConnectionState** — `disconnected | sshConnecting | moshBootstrapping | connected | error`.
+- **ConnectionState** — `disconnected | connecting | connected | error`.
 - **SurgeStatus / Policy / PolicyGroup / Rule / Traffic / LogLine** — parsed domain models.
 
-## 5. Security
+## 4. Security
 
 - No plaintext passwords on disk. SSH key paths + host metadata are stored in the OS
   keychain (desktop, via `keytar`) and `flutter_secure_storage` (mobile).
-- The mosh session key is one-time and held only in memory.
+- Secrets (passwords / key passphrases) live in the keychain and are read into memory only
+  at connect time.
 - IPC between Electron renderer and main is funnelled through a typed, allow-listed
   `contextBridge` surface (`electron/src/preload/index.ts`) — the renderer never touches
   Node APIs directly (`contextIsolation: true`, `nodeIntegration: false`).
 - Host key verification: on first connect the SSH host fingerprint is pinned (TOFU); a
   changed fingerprint aborts the connection.
 
-## 6. Desktop IPC surface
+## 5. Desktop IPC surface
 
 The renderer talks to the main process exclusively through `window.surge`. Note there is
-**no terminal/shell channel** — the renderer cannot read or write the mosh PTY directly.
+**no terminal/shell channel** — the renderer cannot read or write the SSH stream directly.
 
 ```ts
 window.surge.hosts.list()                       // HostConfig[]
@@ -144,4 +111,4 @@ window.surge.logs.onLine(cb)                    // parsed LogLine events
 ```
 
 All channels are defined in `packages/shared/src/ipc.ts` and validated on both ends. The
-mosh PTY lives entirely in the main process (`electron/src/main/`).
+SSH connection lives entirely in the main process (`electron/src/main/`).

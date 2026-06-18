@@ -118,8 +118,7 @@ class PanelStatus extends StatelessWidget {
 extension PhaseLabel on ConnectionPhase {
   String get label => switch (this) {
         ConnectionPhase.disconnected => 'Disconnected',
-        ConnectionPhase.sshConnecting => 'SSH connecting…',
-        ConnectionPhase.moshBootstrapping => 'Starting mosh session…',
+        ConnectionPhase.connecting => 'Connecting…',
         ConnectionPhase.connected => 'Connected',
         ConnectionPhase.error => 'Error',
       };

@@ -1,29 +1,24 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
-import 'channel.dart';
 import 'commands.dart';
-import 'mosh/mosh_client.dart';
 import 'parsers.dart';
-import 'runner.dart';
 import 'ssh.dart';
 import 'types.dart';
 
-/// Owns one active connection: SSH→mosh bootstrap, the transport channel, and
-/// the structured command runner. The transport's raw bytes are NEVER surfaced
-/// to the UI — only structured results (via [run]) and parsed log lines (via
-/// [logs]). Mirror of the Electron `ConnectionManager`.
+/// Owns one SSH connection and runs structured `surge` commands over it via
+/// `exec` (clean stdout + exit code per command). The SSH stream is internal —
+/// the UI only sees structured results (via [run]) and parsed log lines (via
+/// [logs]). No raw shell is exposed. Mirror of the Electron `ConnectionManager`.
 class ConnectionManager {
   ConnectionManager(this._host);
 
   final HostConfig _host;
 
   SSHClient? _client;
-  TerminalChannel? _channel;
-  CommandRunner? _runner;
-  StreamSubscription<String>? _logSub;
-  bool _logStreaming = false;
+  SSHSession? _logSession;
   String _logBuffer = '';
 
   final _state = StreamController<ConnectionState>.broadcast();
@@ -37,21 +32,12 @@ class ConnectionManager {
   }
 
   Future<void> connect() async {
-    _emit(ConnectionPhase.sshConnecting);
+    _emit(ConnectionPhase.connecting);
     try {
-      final client = await connectSsh(_host);
-      _client = client;
-
-      _emit(ConnectionPhase.moshBootstrapping);
-      final handshake = await bootstrapMosh(_host, client);
-
-      // Prefer a native mosh transport; fall back to an SSH shell otherwise.
-      _channel = await NativeMoshClient.isAvailable()
-          ? await NativeMoshClient.connect(handshake)
-          : await SshShellChannel.open(client);
-
-      _runner = CommandRunner(_channel!, _host.surge);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      _client = await connectSsh(_host);
+      _client!.done.then((_) {
+        _emit(ConnectionPhase.disconnected);
+      });
       _emit(ConnectionPhase.connected);
     } catch (e) {
       _emit(ConnectionPhase.error, error: e.toString());
@@ -60,31 +46,37 @@ class ConnectionManager {
     }
   }
 
-  Future<CommandResult> run(SurgeAction action, [List<String> args = const []]) {
-    final runner = _runner;
-    if (runner == null) throw StateError('Not connected');
-    if (_logStreaming) {
-      throw StateError('Stop the log stream before running other actions');
-    }
-    return runner.run(action, args);
+  Future<CommandResult> run(SurgeAction action, [List<String> args = const []]) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final commandLine = buildCommandLine(_host.surge, action, args);
+    final started = DateTime.now();
+    final res = await exec(client, commandLine);
+    return CommandResult(
+      action: action,
+      exitCode: res.code,
+      stdout: res.stdout.isNotEmpty ? res.stdout : res.stderr,
+      durationMs: DateTime.now().difference(started).inMilliseconds,
+    );
   }
 
-  void startLogs() {
-    final channel = _channel;
-    if (channel == null || _logStreaming) return;
-    _logStreaming = true;
+  Future<void> startLogs() async {
+    final client = _client;
+    if (client == null || _logSession != null) return;
     _logBuffer = '';
-    _logSub = channel.output.listen(_onLogChunk);
-    channel.write('${buildCommandLine(_host.surge, SurgeAction.logsTail)}\n');
+    final cmd = buildCommandLine(_host.surge, SurgeAction.logsTail);
+    final session = await client.execute(cmd);
+    _logSession = session;
+    session.stdout.cast<List<int>>().transform(utf8.decoder).listen(_onLogChunk);
+    session.stderr.cast<List<int>>().transform(utf8.decoder).listen(_onLogChunk);
   }
 
   void stopLogs() {
-    final channel = _channel;
-    if (!_logStreaming || channel == null) return;
-    _logStreaming = false;
-    _logSub?.cancel();
-    _logSub = null;
-    channel.write('\x03\n'); // Ctrl-C to interrupt --follow
+    final session = _logSession;
+    if (session == null) return;
+    _logSession = null;
+    session.kill(SSHSignal.INT);
+    session.close();
     _logBuffer = '';
   }
 
@@ -106,10 +98,6 @@ class ConnectionManager {
 
   Future<void> _cleanup() async {
     stopLogs();
-    await _runner?.dispose();
-    _runner = null;
-    await _channel?.close();
-    _channel = null;
     _client?.close();
     _client = null;
   }

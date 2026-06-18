@@ -25,8 +25,7 @@ enum SurgeAction {
 
 enum ConnectionPhase {
   disconnected,
-  sshConnecting,
-  moshBootstrapping,
+  connecting,
   connected,
   error,
 }
@@ -72,7 +71,6 @@ class HostConfig {
     this.privateKeyPath,
     this.secretRef,
     SurgeProfile? surge,
-    this.moshServerArgs,
     required this.createdAt,
     this.lastConnectedAt,
   }) : surge = surge ?? const SurgeProfile();
@@ -86,7 +84,6 @@ class HostConfig {
   final String? privateKeyPath;
   final String? secretRef;
   final SurgeProfile surge;
-  final List<String>? moshServerArgs;
   final int createdAt;
   final int? lastConnectedAt;
 
@@ -100,7 +97,6 @@ class HostConfig {
         'privateKeyPath': privateKeyPath,
         'secretRef': secretRef,
         'surge': surge.toJson(),
-        'moshServerArgs': moshServerArgs,
         'createdAt': createdAt,
         'lastConnectedAt': lastConnectedAt,
       };
@@ -120,7 +116,6 @@ class HostConfig {
         surge: j['surge'] == null
             ? const SurgeProfile()
             : SurgeProfile.fromJson((j['surge'] as Map).cast<String, dynamic>()),
-        moshServerArgs: (j['moshServerArgs'] as List?)?.cast<String>(),
         createdAt: j['createdAt'] as int,
         lastConnectedAt: j['lastConnectedAt'] as int?,
       );

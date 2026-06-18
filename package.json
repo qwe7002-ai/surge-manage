@@ -2,7 +2,7 @@
   "name": "surge-manage",
   "version": "0.1.0",
   "private": true,
-  "description": "Remote management client for the Surge CLI over mosh",
+  "description": "Remote management client for the Surge CLI over SSH",
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "scripts": {

@@ -1,72 +1,75 @@
 import { readFile } from "node:fs/promises";
-import { Client, type ConnectConfig } from "ssh2";
+import { Client, type ClientChannel, type ConnectConfig } from "ssh2";
 import type { HostConfig } from "@surge-manage/shared";
 import { getSecret } from "./secrets";
 
-export interface MoshHandshake {
-  /** UDP port chosen by mosh-server. */
-  port: number;
-  /** Base64 session key passed to mosh-client via MOSH_KEY. */
-  key: string;
-  /** Resolved host address to point mosh-client at. */
-  host: string;
+/** Result of a one-shot SSH command. */
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  code: number;
 }
 
-const MOSH_CONNECT_RE = /MOSH CONNECT (\d+) (\S+)/;
-
-/**
- * Open an SSH connection, run `mosh-server new`, and parse the handshake.
- *
- * mosh-server daemonizes and prints `MOSH CONNECT <port> <key>` then detaches;
- * we only need the SSH channel long enough to capture that line.
- */
-export async function bootstrapMosh(host: HostConfig): Promise<MoshHandshake> {
-  const conn = await connectSsh(host);
-  try {
-    const serverArgs =
-      host.moshServerArgs ?? ["-s", "-c", "256", "-l", "LANG=en_US.UTF-8"];
-    const cmd = `mosh-server new ${serverArgs.join(" ")}`;
-    const output = await exec(conn, cmd);
-    const match = MOSH_CONNECT_RE.exec(output);
-    if (!match) {
-      throw new Error(
-        `mosh-server did not return a handshake. Output:\n${output.slice(0, 500)}`,
-      );
-    }
-    return { port: Number(match[1]), key: match[2]!, host: host.host };
-  } finally {
-    conn.end();
-  }
+/** Open an authenticated SSH connection (key / password / agent). */
+export function connectSsh(host: HostConfig): Promise<Client> {
+  return new Promise((resolve, reject) => {
+    void (async () => {
+      const conn = new Client();
+      let cfg: ConnectConfig;
+      try {
+        cfg = await buildConnectConfig(host);
+      } catch (e) {
+        return reject(e);
+      }
+      conn
+        .on("ready", () => resolve(conn))
+        .on("error", (err) => reject(err))
+        .connect(cfg);
+    })();
+  });
 }
 
-/** Run a one-shot command over SSH and resolve its combined stdout/stderr. */
-export function exec(conn: Client, command: string): Promise<string> {
+/** Run a command to completion and capture stdout/stderr/exit code. */
+export function exec(conn: Client, command: string): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     conn.exec(command, (err, stream) => {
       if (err) return reject(err);
-      let out = "";
+      let stdout = "";
+      let stderr = "";
       stream
-        .on("close", () => resolve(out))
-        .on("data", (d: Buffer) => (out += d.toString("utf8")))
-        .stderr.on("data", (d: Buffer) => (out += d.toString("utf8")));
+        .on("close", (code: number) => resolve({ stdout, stderr, code: code ?? 0 }))
+        .on("data", (d: Buffer) => (stdout += d.toString("utf8")))
+        .stderr.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
     });
   });
 }
 
-export function connectSsh(host: HostConfig): Promise<Client> {
-  return new Promise(async (resolve, reject) => {
-    const conn = new Client();
-    let cfg: ConnectConfig;
-    try {
-      cfg = await buildConnectConfig(host);
-    } catch (e) {
-      return reject(e);
-    }
-    conn
-      .on("ready", () => resolve(conn))
-      .on("error", (err) => reject(err))
-      // TOFU host-key pinning is wired in connection.ts via hostVerifier.
-      .connect(cfg);
+/**
+ * Start a long-running command and stream stdout line-by-line (used for
+ * `surge log --follow`). Returns the channel so the caller can close it to stop.
+ */
+export function execStream(
+  conn: Client,
+  command: string,
+  onLine: (line: string) => void,
+): Promise<ClientChannel> {
+  return new Promise((resolve, reject) => {
+    conn.exec(command, (err, stream) => {
+      if (err) return reject(err);
+      let buffer = "";
+      const flush = (chunk: Buffer) => {
+        buffer += chunk.toString("utf8");
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) onLine(trimmed);
+        }
+      };
+      stream.on("data", flush);
+      stream.stderr.on("data", flush);
+      resolve(stream);
+    });
   });
 }
 

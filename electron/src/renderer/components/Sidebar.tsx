@@ -21,8 +21,7 @@ export function Sidebar() {
 
   const connectedId =
     connection.phase === "connected" ? connection.hostId : undefined;
-  const busyPhase =
-    connection.phase === "sshConnecting" || connection.phase === "moshBootstrapping";
+  const busyPhase = connection.phase === "connecting";
 
   function openNew() {
     setEditing(null);

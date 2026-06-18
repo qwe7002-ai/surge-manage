@@ -23,8 +23,6 @@ export interface HostConfig {
   secretRef?: string;
   /** Overrides for how the `surge` binary is invoked on this host. */
   surge: SurgeProfile;
-  /** Extra args passed to `mosh-server new` (e.g. locale, port range). */
-  moshServerArgs?: string[];
   createdAt: number;
   lastConnectedAt?: number;
 }
@@ -58,8 +56,7 @@ export type SurgeAction =
 
 export type ConnectionPhase =
   | "disconnected"
-  | "sshConnecting"
-  | "moshBootstrapping"
+  | "connecting"
   | "connected"
   | "error";
 
@@ -68,12 +65,12 @@ export interface ConnectionState {
   hostId?: string;
   /** Populated when phase === "error". */
   error?: string;
-  /** Round-trip latency of the mosh link in ms, when known. */
+  /** Round-trip latency of the SSH link in ms, when known. */
   latencyMs?: number;
   since: number;
 }
 
-/** Result of a sentinel-framed structured command. */
+/** Result of a structured surge command run over SSH exec. */
 export interface CommandResult {
   action: SurgeAction;
   exitCode: number;

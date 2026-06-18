@@ -1,5 +1,5 @@
 name: surge_manage
-description: Surge Manage — remote management client for the Surge CLI over mosh.
+description: Surge Manage — remote management client for the Surge CLI over SSH.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
   # shadcn-style component library for Flutter.
   forui: ^0.8.0
-  # Pure-Dart SSH client — used to bootstrap mosh-server and (fallback) shell.
+  # Pure-Dart SSH client — connection + per-command exec.
   dartssh2: ^2.12.0
   # Secrets (SSH passphrases/passwords) in the platform secure storage.
   flutter_secure_storage: ^9.2.2

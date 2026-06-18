@@ -26,7 +26,7 @@ export default function App() {
           <Network className="mr-2 h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold tracking-tight">Surge Manage</span>
           <span className="ml-2 text-xs text-muted-foreground">
-            remote control over mosh
+            remote control over SSH
           </span>
         </header>
 

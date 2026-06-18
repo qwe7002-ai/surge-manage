@@ -12,8 +12,8 @@ import type {
  * exactly what `contextBridge` exposes on `window.surge`.
  *
  * NOTE: there is deliberately NO raw-terminal channel. The renderer never gets
- * shell access — the mosh PTY is an internal transport in the main process. The
- * UI only issues structured surge actions and receives parsed results/log lines.
+ * shell access — the SSH connection is an internal transport in the main process.
+ * The UI only issues structured surge actions and receives parsed results/log lines.
  */
 export const IPC = {
   hostsList: "hosts:list",

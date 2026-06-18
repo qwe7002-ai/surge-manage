@@ -18,7 +18,6 @@
   "dependencies": {
     "@surge-manage/shared": "workspace:*",
     "ssh2": "^1.16.0",
-    "node-pty": "^1.0.0",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
