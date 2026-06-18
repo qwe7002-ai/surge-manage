@@ -34,7 +34,7 @@ class _HostFormState extends State<HostForm> {
     _port = TextEditingController(text: (h?.port ?? 22).toString());
     _username = TextEditingController(text: h?.username ?? 'root');
     _keyPath = TextEditingController(text: h?.privateKeyPath ?? '');
-    _surgeBin = TextEditingController(text: h?.surge.bin ?? 'surge-cli');
+    _surgeBin = TextEditingController(text: h?.surge.bin ?? kDefaultSurgeBin);
     _configDir = TextEditingController(text: h?.configDir ?? '');
     _secret = TextEditingController();
     _auth = h?.auth ?? AuthMethod.key;
@@ -74,7 +74,7 @@ class _HostFormState extends State<HostForm> {
       privateKeyPath:
           _auth == AuthMethod.key && _keyPath.text.trim().isNotEmpty ? _keyPath.text.trim() : null,
       secretRef: secretRef,
-      surge: SurgeProfile(bin: _surgeBin.text.trim().isEmpty ? 'surge-cli' : _surgeBin.text.trim()),
+      surge: SurgeProfile(bin: _surgeBin.text.trim().isEmpty ? kDefaultSurgeBin : _surgeBin.text.trim()),
       configDir: _configDir.text.trim().isEmpty ? null : _configDir.text.trim(),
       createdAt: widget.initial?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
       lastConnectedAt: widget.initial?.lastConnectedAt,

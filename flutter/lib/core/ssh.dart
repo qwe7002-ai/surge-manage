@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
@@ -38,6 +39,38 @@ Future<SSHClient> connectSsh(HostConfig host) async {
       return SSHClient(socket, username: host.username, onPasswordRequest: () => pw);
     case AuthMethod.agent:
       throw UnsupportedError('SSH agent auth is not available on mobile');
+  }
+}
+
+/// Read a remote file's contents as UTF-8 over SFTP.
+Future<String> readRemoteFile(SSHClient client, String path) async {
+  final sftp = await client.sftp();
+  final file = await sftp.open(path);
+  try {
+    final bytes = await file.readBytes();
+    return utf8.decode(bytes);
+  } finally {
+    await file.close();
+  }
+}
+
+/// Write a remote file's contents as UTF-8 over SFTP (overwrites/truncates).
+Future<void> writeRemoteFile(
+  SSHClient client,
+  String path,
+  String content,
+) async {
+  final sftp = await client.sftp();
+  final file = await sftp.open(
+    path,
+    mode: SftpFileOpenMode.create |
+        SftpFileOpenMode.write |
+        SftpFileOpenMode.truncate,
+  );
+  try {
+    await file.writeBytes(Uint8List.fromList(utf8.encode(content)));
+  } finally {
+    await file.close();
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:surge_manage/core/commands.dart';
+import 'package:surge_manage/core/config_doc.dart';
 import 'package:surge_manage/core/parsers.dart';
 import 'package:surge_manage/core/types.dart';
 
@@ -91,6 +92,36 @@ void main() {
     expect(rules[2].type, 'FINAL');
     expect(rules[2].value, '');
     expect(rules[2].policy, 'Proxy');
+  });
+
+  test('parseProxyGroups reads [Proxy Group] members from config', () {
+    const cfg = '''
+# comment
+[Proxy]
+HK = trojan, hk.example.com, 443, password=x
+US = ss, us.example.com, 8388
+
+[Proxy Group]
+Proxy = select, HK, US, DIRECT
+Auto = url-test, HK, US, url = http://t.com, interval=300
+''';
+    final groups = parseProxyGroups(cfg);
+    expect(groups['Proxy'], ['HK', 'US', 'DIRECT']);
+    expect(groups['Auto'], ['HK', 'US']);
+    expect(parseConfigProxies(cfg), ['HK', 'US']);
+  });
+
+  test('config-doc round-trips and edits one section', () {
+    const text = '# header\n[General]\nloglevel = notify\n\n'
+        '[Proxy]\nHK = trojan, hk.com, 443\n[Rule]\nFINAL,Proxy';
+    final doc = parseConfigDocument(text);
+    expect(getSectionEntries(doc, 'Proxy'), ['HK = trojan, hk.com, 443']);
+    final edited = setSectionEntries(doc, 'Rule', ['DOMAIN,a.com,DIRECT', 'FINAL,Proxy']);
+    final out = serializeConfigDocument(edited);
+    expect(out.contains('# header'), isTrue);
+    expect(out.contains('loglevel = notify'), isTrue);
+    expect(out.contains('DOMAIN,a.com,DIRECT'), isTrue);
+    expect(out.contains('HK = trojan, hk.com, 443'), isTrue);
   });
 
   test('buildCommandLine adds --raw to test commands', () {

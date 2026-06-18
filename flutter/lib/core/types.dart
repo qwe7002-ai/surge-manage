@@ -50,9 +50,17 @@ enum ConnectionPhase {
 
 enum LogLevel { debug, info, notify, warning, error, unknown }
 
+/// Default Surge CLI location (macOS bundle path). A bare `surge-cli` is rarely
+/// on PATH, so we default to the documented absolute path.
+const String kDefaultSurgeBin =
+    '/Applications/Surge.app/Contents/Applications/surge-cli';
+
+/// Default Surge profile directory (macOS), used when a host omits `configDir`.
+const String kDefaultConfigDir = '~/Library/Application Support/Surge/Profiles';
+
 /// Per-host customisation of how the `surge` binary is invoked.
 class SurgeProfile {
-  const SurgeProfile({this.bin = 'surge-cli', this.argv = const {}});
+  const SurgeProfile({this.bin = kDefaultSurgeBin, this.argv = const {}});
 
   final String bin;
   final Map<SurgeAction, List<String>> argv;
@@ -74,7 +82,7 @@ class SurgeProfile {
         parsed[action] = (entry.value as List).cast<String>();
       }
     }
-    return SurgeProfile(bin: (j['bin'] as String?) ?? 'surge-cli', argv: parsed);
+    return SurgeProfile(bin: (j['bin'] as String?) ?? kDefaultSurgeBin, argv: parsed);
   }
 }
 

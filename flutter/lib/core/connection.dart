@@ -20,6 +20,7 @@ class ConnectionManager {
   SSHClient? _client;
   SSHSession? _logSession;
   String _logBuffer = '';
+  String? _homeDir;
 
   final _state = StreamController<ConnectionState>.broadcast();
   final _logController = StreamController<LogLine>.broadcast();
@@ -49,11 +50,33 @@ class ConnectionManager {
   /// List `*.conf` profiles in the host's configured config directory.
   Future<List<String>> listProfiles() async {
     final client = _client;
-    final dir = _host.configDir;
     if (client == null) throw StateError('Not connected');
-    if (dir == null || dir.isEmpty) return const [];
+    final dir = (_host.configDir?.trim().isNotEmpty ?? false)
+        ? _host.configDir!.trim()
+        : kDefaultConfigDir;
     final res = await exec(client, buildListProfilesCommand(dir));
     return parseProfiles(res.stdout);
+  }
+
+  /// Read a profile config file from the remote host over SFTP.
+  Future<String> readProfile(String path) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    return readRemoteFile(client, await _resolvePath(path));
+  }
+
+  /// Write a profile config file to the remote host over SFTP.
+  Future<void> writeProfile(String path, String content) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    await writeRemoteFile(client, await _resolvePath(path), content);
+  }
+
+  /// Expand a leading `~` to the remote $HOME (SFTP does not expand it).
+  Future<String> _resolvePath(String path) async {
+    if (path != '~' && !path.startsWith('~/')) return path;
+    _homeDir ??= (await exec(_client!, 'printf %s "\$HOME"')).stdout.trim();
+    return _homeDir! + path.substring(1);
   }
 
   Future<CommandResult> run(SurgeAction action, [List<String> args = const []]) async {

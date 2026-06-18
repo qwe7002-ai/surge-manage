@@ -20,17 +20,26 @@ class _ConnectionsPanelState extends State<ConnectionsPanel> {
     });
   }
 
+  // Busy nodes can report thousands of connections; rendering them all (and
+  // rebuilding every poll) froze the page. Cap the rows we draw.
+  static const _maxRows = 300;
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final conns = state.connections;
+    final shown =
+        conns.length > _maxRows ? conns.sublist(0, _maxRows) : conns;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Text('${conns.length} active',
+            Text(
+                conns.length > _maxRows
+                    ? '${conns.length} active · first $_maxRows'
+                    : '${conns.length} active',
                 style: const TextStyle(color: Colors.white54, fontSize: 13)),
             const Spacer(),
             IconButton(
@@ -46,10 +55,10 @@ class _ConnectionsPanelState extends State<ConnectionsPanel> {
                       style: TextStyle(color: Colors.white38)),
                 )
               : ListView.separated(
-                  itemCount: conns.length,
+                  itemCount: shown.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
-                    final c = conns[i];
+                    final c = shown[i];
                     return ListTile(
                       dense: true,
                       title: Text(

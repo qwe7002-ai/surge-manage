@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/types.dart';
 import '../../state/app_state.dart';
 import '../home_page.dart';
+import '../section_editor.dart';
 
 class PoliciesPanel extends StatefulWidget {
   const PoliciesPanel({super.key});
@@ -14,11 +15,15 @@ class PoliciesPanel extends StatefulWidget {
 }
 
 class _PoliciesPanelState extends State<PoliciesPanel> {
+  bool _editingProxies = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppState>().refreshPolicies();
+      context.read<AppState>()
+        ..refreshPolicies()
+        ..refreshProfiles();
     });
   }
 
@@ -73,8 +78,30 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
         ),
         const SizedBox(height: 12),
         FCard(
-          title: const Text('Proxies'),
-          child: Column(
+          title: Row(
+            children: [
+              const Text('Proxies'),
+              const Spacer(),
+              TextButton.icon(
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: Text(_editingProxies ? 'Done' : 'Edit'),
+                onPressed: () =>
+                    setState(() => _editingProxies = !_editingProxies),
+              ),
+            ],
+          ),
+          child: _editingProxies
+              ? const SizedBox(
+                  height: 420,
+                  child: SectionEditor(
+                    section: 'Proxy',
+                    placeholder:
+                        'MyNode = vmess, server.com, 443, username=uuid, …',
+                    hint:
+                        'Edits the [Proxy] section of the selected profile, then reloads.',
+                  ),
+                )
+              : Column(
             children: [
               for (final p in proxies)
                 _ProxyRow(name: p, test: state.policyTests[p]),
