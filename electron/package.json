@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Surge Manage desktop client (Electron + React + shadcn/ui)",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "author": {
     "name": "Surge Manage",
     "email": "noreply@example.com"

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PROXY_MODES } from "@surge-manage/shared";
 import { Disconnected } from "@/components/Disconnected";
 import { useApp } from "@/store/app-store";
 import { useInterval } from "@/hooks/use-interval";
@@ -36,6 +37,7 @@ export function DashboardPanel() {
   const refreshEnvironment = useApp((s) => s.refreshEnvironment);
   const refreshTraffic = useApp((s) => s.refreshTraffic);
   const runAction = useApp((s) => s.runAction);
+  const setProxyMode = useApp((s) => s.setProxyMode);
 
   // Live-poll active connections while connected and viewing the dashboard.
   useInterval(() => void refreshTraffic(), connected ? 3000 : null);
@@ -99,6 +101,26 @@ export function DashboardPanel() {
           <CardTitle className="text-sm font-medium">Control</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Mode</span>
+            <Select
+              value={
+                environment?.proxyMode != null ? String(environment.proxyMode) : undefined
+              }
+              onValueChange={(v) => void setProxyMode(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-28">
+                <SelectValue placeholder="mode…" />
+              </SelectTrigger>
+              <SelectContent>
+                {PROXY_MODES.map((m) => (
+                  <SelectItem key={m.value} value={String(m.value)}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" disabled={busy} onClick={() => void runAction("reload")}>
             <RotateCw /> Reload profile
           </Button>

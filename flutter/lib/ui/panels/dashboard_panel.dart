@@ -50,6 +50,25 @@ class DashboardPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Row(
+                children: [
+                  const Text('Mode',
+                      style: TextStyle(fontSize: 13, color: Colors.white54)),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: state.environment?.proxyMode,
+                    hint: const Text('mode…'),
+                    items: proxyModes
+                        .map((m) =>
+                            DropdownMenuItem(value: m.value, child: Text(m.label)))
+                        .toList(),
+                    onChanged: state.busy
+                        ? null
+                        : (m) => m != null ? state.setProxyMode(m) : null,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,

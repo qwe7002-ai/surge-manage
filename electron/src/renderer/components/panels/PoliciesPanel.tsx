@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Gauge, RefreshCw } from "lucide-react";
+import { Gauge, RefreshCw, Repeat } from "lucide-react";
 import type { PolicyTest } from "@surge-manage/shared";
 import {
   Card,
@@ -9,17 +9,27 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Disconnected } from "@/components/Disconnected";
 import { useApp } from "@/store/app-store";
 
 export function PoliciesPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
   const policies = useApp((s) => s.policies);
+  const subPolicies = useApp((s) => s.subPolicies);
+  const selection = useApp((s) => s.environment?.selection ?? {});
   const policyTests = useApp((s) => s.policyTests);
   const busy = useApp((s) => s.busy);
   const refreshPolicies = useApp((s) => s.refreshPolicies);
   const testAllPolicies = useApp((s) => s.testAllPolicies);
   const testGroup = useApp((s) => s.testGroup);
+  const selectPolicy = useApp((s) => s.selectPolicy);
 
   useEffect(() => {
     if (connected) void refreshPolicies();
@@ -55,22 +65,52 @@ export function PoliciesPanel() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Policy groups</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
+        <CardContent className="grid gap-2 sm:grid-cols-2">
           {groups.length === 0 && (
             <span className="text-sm text-muted-foreground">No policy groups.</span>
           )}
-          {groups.map((g) => (
-            <Button
-              key={g}
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              title="Retest this group"
-              onClick={() => void testGroup(g)}
-            >
-              {g}
-            </Button>
-          ))}
+          {groups.map((g) => {
+            const members = subPolicies[g] ?? [];
+            return (
+              <div key={g} className="flex items-center gap-1.5">
+                <span className="w-28 shrink-0 truncate text-sm" title={g}>
+                  {g}
+                </span>
+                {members.length > 0 ? (
+                  <Select
+                    value={selection[g] ?? undefined}
+                    disabled={busy}
+                    onValueChange={(v) => void selectPolicy(g, v)}
+                  >
+                    <SelectTrigger className="h-8 flex-1">
+                      <SelectValue placeholder="select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="flex-1 truncate text-xs text-muted-foreground">
+                    {selection[g] ?? "—"}
+                  </span>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  disabled={busy}
+                  title="Retest this group"
+                  onClick={() => void testGroup(g)}
+                >
+                  <Repeat />
+                </Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

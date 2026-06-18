@@ -48,18 +48,19 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
         const SizedBox(height: 8),
         FCard(
           title: const Text('Policy groups'),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          child: Column(
             children: [
               if (groups.isEmpty)
                 const Text('No policy groups.',
                     style: TextStyle(color: Colors.white54)),
               for (final g in groups)
-                FButton(
-                  style: FButtonStyle.outline,
-                  onPress: state.busy ? null : () => state.testGroup(g),
-                  label: Text(g),
+                _GroupRow(
+                  group: g,
+                  members: state.subPolicies[g] ?? const [],
+                  selected: state.environment?.selection[g],
+                  busy: state.busy,
+                  onSelect: (p) => state.selectPolicy(g, p),
+                  onRetest: () => state.testGroup(g),
                 ),
             ],
           ),
@@ -75,6 +76,58 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GroupRow extends StatelessWidget {
+  const _GroupRow({
+    required this.group,
+    required this.members,
+    required this.selected,
+    required this.busy,
+    required this.onSelect,
+    required this.onRetest,
+  });
+
+  final String group;
+  final List<String> members;
+  final String? selected;
+  final bool busy;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onRetest;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(group, overflow: TextOverflow.ellipsis),
+          ),
+          Expanded(
+            child: members.isEmpty
+                ? Text(selected ?? '—',
+                    style: const TextStyle(color: Colors.white54, fontSize: 13))
+                : DropdownButton<String>(
+                    isExpanded: true,
+                    value: members.contains(selected) ? selected : null,
+                    hint: const Text('select…'),
+                    items: members
+                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
+                    onChanged: busy ? null : (m) => m != null ? onSelect(m) : null,
+                  ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.repeat, size: 18),
+            tooltip: 'Retest group',
+            onPressed: busy ? null : onRetest,
+          ),
+        ],
+      ),
     );
   }
 }

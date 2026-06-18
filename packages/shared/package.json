@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shared surge command catalog, parsers, and types",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

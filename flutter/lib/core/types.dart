@@ -13,6 +13,7 @@ enum SurgeAction {
   switchProfile,
   environment,
   dumpPolicy,
+  dumpPolicySubPolicies,
   dumpRule,
   dumpActive,
   dumpRequest,
@@ -160,10 +161,28 @@ class CommandResult {
 }
 
 class Environment {
-  const Environment({this.fields = const {}, this.raw});
+  const Environment({
+    this.fields = const {},
+    this.selection = const {},
+    this.proxyMode,
+    this.raw,
+  });
   final Map<String, String> fields;
+
+  /// ProxyGroupSelection: select-group name → currently selected policy.
+  final Map<String, String> selection;
+
+  /// ProxyMode: 0 = Direct, 1 = Global, 2 = Rule.
+  final int? proxyMode;
   final dynamic raw;
 }
+
+/// Outbound mode values for the `ProxyMode` environment key.
+const proxyModes = [
+  (value: 0, label: 'Direct'),
+  (value: 1, label: 'Global'),
+  (value: 2, label: 'Rule'),
+];
 
 /// From `surge --raw dump policy` → names of proxies and policy groups.
 class PolicyDump {

@@ -89,4 +89,4 @@ binary) are marked with `TODO(live)` in the code.
 
 ## License
 
-MIT
+BSD-3-Clause. See [`LICENSE`](LICENSE).

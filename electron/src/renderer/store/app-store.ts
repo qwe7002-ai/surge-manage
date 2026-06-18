@@ -6,6 +6,7 @@ import {
   parsePolicies,
   parsePolicyTests,
   parseRules,
+  parseSubPolicies,
   type ConnectionState,
   type Environment,
   type HostConfig,
@@ -25,6 +26,7 @@ interface AppState {
   connection: ConnectionState;
   environment: Environment | null;
   policies: PolicyDump | null;
+  subPolicies: Record<string, string[]>;
   policyTests: Record<string, PolicyTest>;
   rules: Rule[];
   traffic: Traffic | null;
@@ -45,6 +47,8 @@ interface AppState {
   refreshPolicies: () => Promise<void>;
   refreshRules: () => Promise<void>;
   refreshTraffic: () => Promise<void>;
+  selectPolicy: (group: string, policy: string) => Promise<void>;
+  setProxyMode: (mode: number) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
   /** Run a no-arg or single-arg surge action and surface its result text. */
@@ -60,6 +64,7 @@ export const useApp = create<AppState>((set, get) => ({
   connection: { phase: "disconnected", since: Date.now() },
   environment: null,
   policies: null,
+  subPolicies: {},
   policyTests: {},
   rules: [],
   traffic: null,
@@ -82,6 +87,7 @@ export const useApp = create<AppState>((set, get) => ({
         set({
           environment: null,
           policies: null,
+          subPolicies: {},
           policyTests: {},
           rules: [],
           traffic: null,
@@ -146,8 +152,16 @@ export const useApp = create<AppState>((set, get) => ({
 
   async refreshPolicies() {
     await guarded(set, async () => {
-      const r = await window.surge.surge.run("dumpPolicy");
-      set({ policies: parsePolicies(r.stdout) });
+      const [dump, subs] = await Promise.all([
+        window.surge.surge.run("dumpPolicy"),
+        window.surge.surge.run("dumpPolicySubPolicies").catch(() => null),
+      ]);
+      set({
+        policies: parsePolicies(dump.stdout),
+        subPolicies: subs ? parseSubPolicies(subs.stdout) : {},
+      });
+      // Selection lives in the environment dictionary.
+      await get().refreshEnvironment();
     });
   },
 
@@ -165,6 +179,22 @@ export const useApp = create<AppState>((set, get) => ({
     } catch {
       /* polling is best-effort */
     }
+  },
+
+  async selectPolicy(group, policy) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("setEnvironment", [
+        `ProxyGroupSelection.${group}=${policy}`,
+      ]);
+      await get().refreshEnvironment();
+    });
+  },
+
+  async setProxyMode(mode) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("setEnvironment", [`ProxyMode=${mode}`]);
+      await get().refreshEnvironment();
+    });
   },
 
   async testAllPolicies() {

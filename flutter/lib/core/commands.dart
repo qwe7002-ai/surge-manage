@@ -32,6 +32,11 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       action: SurgeAction.environment, argv: ['--raw', 'environment'], mutates: false, arity: 0),
   SurgeAction.dumpPolicy: CommandSpec(
       action: SurgeAction.dumpPolicy, argv: ['--raw', 'dump', 'policy'], mutates: false, arity: 0),
+  SurgeAction.dumpPolicySubPolicies: CommandSpec(
+      action: SurgeAction.dumpPolicySubPolicies,
+      argv: ['--raw', 'dump', 'policy-group-sub-policies'],
+      mutates: false,
+      arity: 0),
   SurgeAction.dumpRule: CommandSpec(
       action: SurgeAction.dumpRule, argv: ['--raw', 'dump', 'rule'], mutates: false, arity: 0),
   SurgeAction.dumpActive: CommandSpec(
@@ -75,8 +80,9 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       CommandSpec(action: SurgeAction.kill, argv: ['kill', '{0}'], mutates: true, arity: 1),
   SurgeAction.setLogLevel: CommandSpec(
       action: SurgeAction.setLogLevel, argv: ['set-log-level', '{0}'], mutates: true, arity: 1),
+  // `set` takes one "key=value" token as {0} (e.g. "ProxyGroupSelection.Proxy=HK").
   SurgeAction.setEnvironment: CommandSpec(
-      action: SurgeAction.setEnvironment, argv: ['set', '{0}', '{1}'], mutates: true, arity: 2),
+      action: SurgeAction.setEnvironment, argv: ['set', '{0}'], mutates: true, arity: 1),
 };
 
 final RegExp _placeholder = RegExp(r'^\{(\d+)\}$');

@@ -51,6 +51,7 @@ export type SurgeAction =
   // inspection (dump *)
   | "environment" // environment
   | "dumpPolicy" // dump policy
+  | "dumpPolicySubPolicies" // dump policy-group-sub-policies
   | "dumpRule" // dump rule
   | "dumpActive" // dump active
   | "dumpRequest" // dump request
@@ -69,7 +70,7 @@ export type SurgeAction =
   | "diagnostics" // diagnostics
   | "kill" // kill <connection-id>
   | "setLogLevel" // set-log-level <level>
-  | "setEnvironment"; // set <key-path> <value>
+  | "setEnvironment"; // set <key-path>=<value> (one "k=v" token per arg)
 
 export type ConnectionPhase =
   | "disconnected"
@@ -102,6 +103,10 @@ export interface CommandResult {
 export interface Environment {
   /** Flattened key/value view for display. */
   fields: Record<string, string>;
+  /** ProxyGroupSelection: select-group name → currently selected policy. */
+  selection: Record<string, string>;
+  /** ProxyMode: 0 = Direct, 1 = Global Proxy, 2 = Rule. */
+  proxyMode?: number;
   raw?: unknown;
 }
 
@@ -110,6 +115,13 @@ export interface PolicyDump {
   proxies: string[];
   groups: string[];
 }
+
+/** Outbound mode values for the `ProxyMode` environment key. */
+export const PROXY_MODES = [
+  { value: 0, label: "Direct" },
+  { value: 1, label: "Global" },
+  { value: 2, label: "Rule" },
+] as const;
 
 /**
  * One proxy's result from `surge --raw test-all-policies` /

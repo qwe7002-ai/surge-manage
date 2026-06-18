@@ -19,16 +19,61 @@ dynamic _tryJson(String text) {
 num? _num(dynamic v) => v is num ? v : null;
 String? _str(dynamic v) => v is String ? v : null;
 
+/// Surge may wrap payloads as {result, error, <payload>}. Unwrap by key.
+dynamic _unwrap(Map outer, String key) => outer.containsKey(key) ? outer[key] : outer;
+
+/// Surface a Surge `error` field from a --raw response, if any.
+String? extractError(String stdout) {
+  final json = _tryJson(stdout);
+  return json is Map ? _str(json['error']) : null;
+}
+
 Environment parseEnvironment(String stdout) {
   final json = _tryJson(stdout);
   final fields = <String, String>{};
-  if (json is Map) {
-    json.forEach((k, v) {
+  final selection = <String, String>{};
+  int? proxyMode;
+
+  final env = json is Map ? _unwrap(json, 'environment') : null;
+  if (env is Map) {
+    env.forEach((k, v) {
       if (v == null) return;
+      if (k == 'ProxyGroupSelection' && v is Map) {
+        v.forEach((g, p) {
+          final name = _str(p);
+          if (name != null) selection['$g'] = name;
+        });
+        return;
+      }
+      if (k == 'ProxyMode') {
+        proxyMode = _num(v)?.toInt() ?? int.tryParse('$v');
+      }
       fields['$k'] = v is Map || v is List ? jsonEncode(v) : '$v';
     });
   }
-  return Environment(fields: fields, raw: json ?? stdout);
+  return Environment(
+    fields: fields,
+    selection: selection,
+    proxyMode: proxyMode,
+    raw: json ?? stdout,
+  );
+}
+
+/// `surge --raw dump policy-group-sub-policies` → group → member names.
+Map<String, List<String>> parseSubPolicies(String stdout) {
+  final json = _tryJson(stdout);
+  if (json is! Map) return {};
+  final rec = _unwrap(json, 'policy-group-sub-policies');
+  final map = rec is Map ? rec : json;
+  final out = <String, List<String>>{};
+  map.forEach((group, value) {
+    if (value is List) {
+      out['$group'] = _names(value);
+    } else if (value is Map) {
+      out['$group'] = _names(value['all'] ?? value['members'] ?? value['subPolicies']);
+    }
+  });
+  return out;
 }
 
 List<String> _names(dynamic v) =>

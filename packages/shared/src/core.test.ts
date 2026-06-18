@@ -8,6 +8,7 @@ import {
   parsePolicies,
   parsePolicyTests,
   parseRules,
+  parseSubPolicies,
 } from "../dist/parsers.js";
 import type { SurgeProfile } from "../dist/types.js";
 
@@ -22,6 +23,11 @@ test("buildCommandLine maps to real surge commands with --raw", () => {
     "surge switch-profile 'Home Profile'",
   );
   assert.equal(buildCommandLine(profile, "kill", ["42"]), "surge kill 42");
+  // `set` takes a single key=value token.
+  assert.equal(
+    buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy=HK"]),
+    "surge set ProxyGroupSelection.Proxy=HK",
+  );
 });
 
 test("buildCommandLine enforces arity (injection guard)", () => {
@@ -33,10 +39,22 @@ test("shellQuote escapes single quotes", () => {
   assert.equal(shellQuote("a'b"), `'a'\\''b'`);
 });
 
-test("parseEnvironment flattens json", () => {
-  const env = parseEnvironment('{"system-proxy":true,"outbound-mode":"rule"}');
-  assert.equal(env.fields["outbound-mode"], "rule");
-  assert.equal(env.fields["system-proxy"], "true");
+test("parseEnvironment flattens, unwraps envelope, extracts selection/mode", () => {
+  const env = parseEnvironment(
+    '{"environment":{"ProxyMode":2,"ProxyGroupSelection":{"Proxy":"HK"},"MitMEnabled":1}}',
+  );
+  assert.equal(env.proxyMode, 2);
+  assert.equal(env.selection["Proxy"], "HK");
+  assert.equal(env.fields["MitMEnabled"], "1");
+  // Also works without the envelope wrapper.
+  const flat = parseEnvironment('{"ProxyMode":0}');
+  assert.equal(flat.proxyMode, 0);
+});
+
+test("parseSubPolicies maps group → members", () => {
+  const subs = parseSubPolicies('{"Proxy":["HK","US"],"Apple":{"all":["DIRECT","Proxy"]}}');
+  assert.deepEqual(subs["Proxy"], ["HK", "US"]);
+  assert.deepEqual(subs["Apple"], ["DIRECT", "Proxy"]);
 });
 
 test("parsePolicies reads proxies + policy-groups names", () => {

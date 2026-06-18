@@ -17,6 +17,7 @@ class AppState extends ChangeNotifier {
 
   Environment? environment;
   PolicyDump? policies;
+  Map<String, List<String>> subPolicies = {};
   final Map<String, PolicyTest> policyTests = {};
   List<Rule> rules = [];
   Traffic? traffic;
@@ -102,6 +103,7 @@ class AppState extends ChangeNotifier {
           s.phase == ConnectionPhase.error) {
         environment = null;
         policies = null;
+        subPolicies = {};
         policyTests.clear();
         rules = [];
         traffic = null;
@@ -140,8 +142,29 @@ class AppState extends ChangeNotifier {
       });
 
   Future<void> refreshPolicies() => _guard(() async {
-        final r = await _manager!.run(SurgeAction.dumpPolicy);
-        policies = parsePolicies(r.stdout);
+        final dump = await _manager!.run(SurgeAction.dumpPolicy);
+        policies = parsePolicies(dump.stdout);
+        try {
+          final subs = await _manager!.run(SurgeAction.dumpPolicySubPolicies);
+          subPolicies = parseSubPolicies(subs.stdout);
+        } catch (_) {
+          subPolicies = {};
+        }
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+      });
+
+  Future<void> selectPolicy(String group, String policy) => _guard(() async {
+        await _manager!
+            .run(SurgeAction.setEnvironment, ['ProxyGroupSelection.$group=$policy']);
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+      });
+
+  Future<void> setProxyMode(int mode) => _guard(() async {
+        await _manager!.run(SurgeAction.setEnvironment, ['ProxyMode=$mode']);
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
       });
 
   Future<void> refreshRules() => _guard(() async {

@@ -33,6 +33,12 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   // inspection (--raw → JSON)
   environment: { action: "environment", argv: ["--raw", "environment"], mutates: false, arity: 0 },
   dumpPolicy: { action: "dumpPolicy", argv: ["--raw", "dump", "policy"], mutates: false, arity: 0 },
+  dumpPolicySubPolicies: {
+    action: "dumpPolicySubPolicies",
+    argv: ["--raw", "dump", "policy-group-sub-policies"],
+    mutates: false,
+    arity: 0,
+  },
   dumpRule: { action: "dumpRule", argv: ["--raw", "dump", "rule"], mutates: false, arity: 0 },
   dumpActive: { action: "dumpActive", argv: ["--raw", "dump", "active"], mutates: false, arity: 0 },
   dumpRequest: { action: "dumpRequest", argv: ["--raw", "dump", "request"], mutates: false, arity: 0 },
@@ -72,7 +78,9 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   diagnostics: { action: "diagnostics", argv: ["diagnostics"], mutates: false, arity: 0 },
   kill: { action: "kill", argv: ["kill", "{0}"], mutates: true, arity: 1 },
   setLogLevel: { action: "setLogLevel", argv: ["set-log-level", "{0}"], mutates: true, arity: 1 },
-  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}", "{1}"], mutates: true, arity: 2 },
+  // `set` takes one or more `key=value` tokens; we pass a single pre-joined
+  // "key=value" string as {0} (e.g. "ProxyGroupSelection.Proxy=HK").
+  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}"], mutates: true, arity: 1 },
 };
 
 /** Shell-quote a single token for safe interpolation into a remote command. */

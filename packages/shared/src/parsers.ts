@@ -33,6 +33,22 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+/**
+ * Surge sometimes wraps payloads in a response envelope
+ * (`{ "result": ..., "error": ..., "<payload>": ... }`). Given a payload key,
+ * return the inner payload when present, else the object itself.
+ */
+function unwrap(obj: Record<string, unknown>, key: string): unknown {
+  if (key in obj) return obj[key];
+  return obj;
+}
+
+/** Surface a Surge `error` field from a --raw response, if any. */
+export function extractError(stdout: string): string | undefined {
+  const rec = asRecord(tryJson(stdout));
+  return rec ? str(rec.error) : undefined;
+}
+
 function num(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
@@ -45,15 +61,32 @@ function str(v: unknown): string | undefined {
 export function parseEnvironment(stdout: string): Environment {
   const json = tryJson(stdout);
   const fields: Record<string, string> = {};
-  const rec = asRecord(json);
-  if (rec) {
-    for (const [k, v] of Object.entries(rec)) {
+  const selection: Record<string, string> = {};
+  let proxyMode: number | undefined;
+
+  const outer = asRecord(json);
+  const env = asRecord(outer ? unwrap(outer, "environment") : undefined);
+  if (env) {
+    for (const [k, v] of Object.entries(env)) {
       if (v === null || v === undefined) continue;
-      fields[k] =
-        typeof v === "object" ? JSON.stringify(v) : String(v);
+      if (k === "ProxyGroupSelection") {
+        const sel = asRecord(v);
+        if (sel) {
+          for (const [g, p] of Object.entries(sel)) {
+            const name = str(p);
+            if (name) selection[g] = name;
+          }
+        }
+        continue;
+      }
+      if (k === "ProxyMode") {
+        proxyMode = num(v) ?? Number(v);
+        if (!Number.isFinite(proxyMode)) proxyMode = undefined;
+      }
+      fields[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
     }
   }
-  return { fields, raw: json ?? stdout };
+  return { fields, selection, proxyMode, raw: json ?? stdout };
 }
 
 function toNames(v: unknown): string[] {
@@ -70,6 +103,25 @@ export function parsePolicies(stdout: string): PolicyDump {
     proxies: toNames(rec?.proxies),
     groups: toNames(rec?.["policy-groups"] ?? rec?.policyGroups ?? rec?.groups),
   };
+}
+
+/**
+ * `surge --raw dump policy-group-sub-policies` → group → member names.
+ * Tolerant of `{ "Group": [...] }` and `{ "Group": { "all": [...] } }`.
+ */
+export function parseSubPolicies(stdout: string): Record<string, string[]> {
+  const outer = asRecord(tryJson(stdout));
+  if (!outer) return {};
+  const rec = asRecord(unwrap(outer, "policy-group-sub-policies")) ?? outer;
+  const out: Record<string, string[]> = {};
+  for (const [group, value] of Object.entries(rec)) {
+    if (Array.isArray(value)) out[group] = toNames(value);
+    else {
+      const g = asRecord(value);
+      if (g) out[group] = toNames(g.all ?? g.members ?? g.subPolicies);
+    }
+  }
+  return out;
 }
 
 /**
