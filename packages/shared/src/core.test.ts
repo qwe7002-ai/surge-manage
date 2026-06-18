@@ -14,6 +14,12 @@ import {
   parseSubPolicies,
   parseTempRules,
 } from "../dist/parsers.js";
+import {
+  getSectionEntries,
+  parseConfigDocument,
+  serializeConfigDocument,
+  setSectionEntries,
+} from "../dist/config-doc.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -53,6 +59,34 @@ test("parseEnvironment flattens, unwraps envelope, extracts selection/mode", () 
   // Also works without the envelope wrapper.
   const flat = parseEnvironment('{"ProxyMode":0}');
   assert.equal(flat.proxyMode, 0);
+});
+
+test("config-doc round-trips and edits one section without clobbering others", () => {
+  const text = [
+    "# header comment",
+    "[General]",
+    "loglevel = notify",
+    "",
+    "[Proxy]",
+    "HK = trojan, hk.com, 443",
+    "[Rule]",
+    "FINAL,Proxy",
+  ].join("\n");
+  const doc = parseConfigDocument(text);
+  assert.deepEqual(getSectionEntries(doc, "Proxy"), ["HK = trojan, hk.com, 443"]);
+  // Editing [Rule] must preserve [General] and its comment/blank lines.
+  const edited = setSectionEntries(doc, "Rule", [
+    "DOMAIN,a.com,DIRECT",
+    "FINAL,Proxy",
+  ]);
+  const out = serializeConfigDocument(edited);
+  assert.ok(out.includes("# header comment"));
+  assert.ok(out.includes("loglevel = notify"));
+  assert.ok(out.includes("DOMAIN,a.com,DIRECT"));
+  assert.ok(out.includes("HK = trojan, hk.com, 443"));
+  // A section added when absent is appended.
+  const withDns = setSectionEntries(doc, "DNS", ["server = 1.1.1.1"]);
+  assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
 });
 
 test("parseProxyGroups reads [Proxy Group] members from config", () => {

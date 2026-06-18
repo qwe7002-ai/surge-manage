@@ -10,7 +10,13 @@ import {
   type HostConfig,
   type SurgeAction,
 } from "@surge-manage/shared";
-import { connectSsh, exec, execStream } from "./ssh";
+import {
+  connectSsh,
+  exec,
+  execStream,
+  readRemoteFile,
+  writeRemoteFile,
+} from "./ssh";
 
 /**
  * Owns the lifecycle of a single SSH connection and runs structured `surge`
@@ -28,6 +34,8 @@ export class ConnectionManager extends EventEmitter {
   private current: HostConfig | null = null;
   private logChannel: ClientChannel | null = null;
   private state: ConnectionState = { phase: "disconnected", since: Date.now() };
+  /** Cached remote $HOME for expanding `~` in profile paths. */
+  private homeDir: string | null = null;
 
   getState(): ConnectionState {
     return this.state;
@@ -41,6 +49,7 @@ export class ConnectionManager extends EventEmitter {
   async connect(host: HostConfig): Promise<void> {
     if (this.client) await this.disconnect();
     this.current = host;
+    this.homeDir = null; // re-resolve per host
     this.setState({ phase: "connecting", hostId: host.id, error: undefined });
 
     try {
@@ -83,6 +92,31 @@ export class ConnectionManager extends EventEmitter {
       stdout: stdout || stderr,
       durationMs: Date.now() - started,
     };
+  }
+
+  /** Read a profile config file from the remote host over SFTP. */
+  async readProfile(path: string): Promise<string> {
+    if (!this.client) throw new Error("Not connected");
+    return readRemoteFile(this.client, await this.resolvePath(path));
+  }
+
+  /** Write a profile config file to the remote host over SFTP. */
+  async writeProfile(path: string, content: string): Promise<void> {
+    if (!this.client) throw new Error("Not connected");
+    await writeRemoteFile(this.client, await this.resolvePath(path), content);
+  }
+
+  /**
+   * Expand a leading `~` to the remote home directory. SFTP (unlike a shell)
+   * does not expand `~`, and config dirs are often `~/Library/.../Profiles`.
+   */
+  private async resolvePath(path: string): Promise<string> {
+    if (path !== "~" && !path.startsWith("~/")) return path;
+    if (this.homeDir === null) {
+      const { stdout } = await exec(this.client!, 'printf %s "$HOME"');
+      this.homeDir = stdout.trim();
+    }
+    return this.homeDir + path.slice(1);
   }
 
   /** List `*.conf` profiles in the host's configured config directory. */

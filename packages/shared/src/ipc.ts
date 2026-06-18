@@ -25,6 +25,8 @@ export const IPC = {
   connState: "conn:state", // main → renderer event
   surgeRun: "surge:run",
   profilesList: "profiles:list",
+  profileRead: "profile:read",
+  profileWrite: "profile:write",
   logsStart: "logs:start",
   logsStop: "logs:stop",
   logLine: "log:line", // main → renderer event (parsed streaming surge logs)
@@ -49,6 +51,10 @@ export interface SurgeBridge {
   profiles: {
     /** List `*.conf` profile names in the host's configured config directory. */
     list(): Promise<string[]>;
+    /** Read a profile config file (absolute remote path) over SFTP. */
+    read(path: string): Promise<string>;
+    /** Overwrite a profile config file (absolute remote path) over SFTP. */
+    write(path: string, content: string): Promise<void>;
   };
   logs: {
     /** Begin streaming parsed surge log lines (e.g. when the Logs tab opens). */

@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import {
   aggregateTraffic,
+  getSectionEntries,
+  parseConfigDocument,
+  serializeConfigDocument,
+  setSectionEntries,
   parseActive,
   parseEnvironment,
   parsePolicies,
@@ -39,6 +43,8 @@ interface AppState {
   traffic: Traffic | null;
   connections: ActiveConnection[];
   profiles: string[];
+  /** Profile whose config file structured editors read/write. */
+  activeProfile: string | null;
   logs: LogLine[];
   logStreaming: boolean;
   busy: boolean;
@@ -72,6 +78,15 @@ interface AppState {
   killConnection: (id: string) => Promise<void>;
   refreshProfiles: () => Promise<void>;
   switchProfile: (name: string) => Promise<void>;
+  setActiveProfile: (name: string) => void;
+  /** Read a config section's entry lines from a profile file. */
+  readProfileSection: (profile: string, section: string) => Promise<string[]>;
+  /** Replace a config section's entries in a profile file, then reload. */
+  writeProfileSection: (
+    profile: string,
+    section: string,
+    entries: string[],
+  ) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
   /** Run a no-arg or single-arg surge action and surface its result text. */
@@ -95,6 +110,7 @@ export const useApp = create<AppState>((set, get) => ({
   traffic: null,
   connections: [],
   profiles: [],
+  activeProfile: null,
   logs: [],
   logStreaming: false,
   busy: false,
@@ -300,17 +316,47 @@ export const useApp = create<AppState>((set, get) => ({
 
   async refreshProfiles() {
     try {
-      set({ profiles: await window.surge.profiles.list() });
+      const profiles = await window.surge.profiles.list();
+      set((s) => ({
+        profiles,
+        activeProfile:
+          s.activeProfile && profiles.includes(s.activeProfile)
+            ? s.activeProfile
+            : profiles[0] ?? null,
+      }));
     } catch {
-      set({ profiles: [] });
+      set({ profiles: [], activeProfile: null });
     }
   },
 
   async switchProfile(name) {
     await guarded(set, async () => {
       await window.surge.surge.run("switchProfile", [name]);
+      set({ activeProfile: name });
       await get().refreshEnvironment();
       await get().refreshPolicies();
+    });
+  },
+
+  setActiveProfile(name) {
+    set({ activeProfile: name });
+  },
+
+  async readProfileSection(profile, section) {
+    const text = await window.surge.profiles.read(profilePath(get, profile));
+    return getSectionEntries(parseConfigDocument(text), section);
+  },
+
+  async writeProfileSection(profile, section, entries) {
+    await guarded(set, async () => {
+      const path = profilePath(get, profile);
+      // Read-modify-write so we only touch this section and preserve the rest.
+      const text = await window.surge.profiles.read(path);
+      const next = setSectionEntries(parseConfigDocument(text), section, entries);
+      await window.surge.profiles.write(path, serializeConfigDocument(next));
+      // Apply the change if we edited the active profile.
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved ${section} to ${profile}.conf and reloaded` });
     });
   },
 
@@ -380,6 +426,16 @@ export const useApp = create<AppState>((set, get) => ({
 
 type SetFn = (partial: Partial<AppState>) => void;
 type GetFn = () => AppState;
+
+/** Build the remote profile path: `<configDir>/<profile>.conf`. */
+function profilePath(get: GetFn, profile: string): string {
+  const host = get().hosts.find((h) => h.id === get().selectedHostId);
+  const dir = host?.configDir?.trim();
+  if (!dir) {
+    throw new Error("Set the host's config directory to edit profiles");
+  }
+  return `${dir.replace(/\/+$/, "")}/${profile}.conf`;
+}
 
 function mergeTests(set: SetFn, get: GetFn, tests: PolicyTest[]): void {
   const next = { ...get().policyTests };
