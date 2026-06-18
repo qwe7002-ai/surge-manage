@@ -68,7 +68,7 @@ export function LogsPanel() {
         className="min-h-0 flex-1 overflow-auto rounded-md border bg-black/40 p-3 font-mono text-xs leading-relaxed"
       >
         {logs.length === 0 ? (
-          <p className="text-muted-foreground">Waiting for log output…</p>
+          <p className="text-muted-foreground">Waiting for requests…</p>
         ) : (
           logs.map((line, i) => (
             <div key={i} className={cn("whitespace-pre-wrap break-all", LEVEL_COLOR[line.level])}>

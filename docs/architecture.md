@@ -43,33 +43,48 @@ Implementation: `electron/src/main/ssh.ts` (node `ssh2`) and `flutter/lib/core/s
 
 ## 2. Surge command catalog
 
-A single declarative catalog describes every management action: its argv template, whether
-it mutates state, and the parser for its output. This keeps both clients' feature sets
-identical and makes adding a command a one-liner.
+A single declarative catalog maps each action 1:1 onto a real **Surge CLI** command
+(`surge-cli`). Query actions add the global `--raw` flag for JSON output.
 
-| Action            | Command (default)             | Parser           |
-|-------------------|-------------------------------|------------------|
-| `version`         | `surge --version`             | text             |
-| `status`          | `surge --raw status`          | JSON → Status    |
-| `start`           | `surge start`                 | exit-code        |
-| `stop`            | `surge stop`                  | exit-code        |
-| `restart`         | `surge restart`               | exit-code        |
-| `reload`          | `surge reload`                | exit-code        |
-| `policies`        | `surge --raw policy list`     | JSON → Policy[]  |
-| `selectPolicy`    | `surge policy select <g> <p>` | exit-code        |
-| `rules`           | `surge --raw rule list`       | JSON → Rule[]    |
-| `traffic`         | `surge --raw traffic`         | JSON → Traffic   |
-| `logsTail`        | `surge log --follow`          | stream lines     |
-| `configPath`      | `surge config path`           | text             |
-| `configShow`      | `surge config show`           | text             |
-| `test`            | `surge test <policy>`         | text (latency)   |
+| Action                  | Command (default)             | Parser              |
+|-------------------------|-------------------------------|---------------------|
+| `environment`           | `surge-cli --raw environment` | JSON → Environment  |
+| `dumpPolicy`            | `surge-cli --raw dump policy` | JSON → PolicyDump   |
+| `dumpRule`              | `surge-cli --raw dump rule`   | JSON → Rule[]       |
+| `dumpActive`            | `surge-cli --raw dump active` | JSON → Connection[] |
+| `dumpRequest`           | `surge-cli --raw dump request`| JSON                |
+| `dumpDns`               | `surge-cli --raw dump dns`    | JSON                |
+| `dumpProfileEffective`  | `surge-cli dump profile effective` | text           |
+| `dumpProfileOriginal`   | `surge-cli dump profile original`  | text           |
+| `reload`                | `surge-cli reload`            | exit-code           |
+| `stop`                  | `surge-cli stop`              | exit-code           |
+| `switchProfile`         | `surge-cli switch-profile <n>`| exit-code           |
+| `watchRequest`          | `surge-cli watch request`     | stream lines        |
+| `testNetwork`           | `surge-cli test-network`      | text                |
+| `testPolicy`            | `surge-cli test-policy <n>`   | JSON → PolicyTest   |
+| `testAllPolicies`       | `surge-cli test-all-policies` | JSON → PolicyTest[] |
+| `testGroup`             | `surge-cli test-group <n>`    | JSON → PolicyTest[] |
+| `flushDns`              | `surge-cli flush dns`         | exit-code           |
+| `diagnostics`           | `surge-cli diagnostics`       | text                |
+| `kill`                  | `surge-cli kill <id>`         | exit-code           |
+| `setLogLevel`           | `surge-cli set-log-level <l>` | exit-code           |
+| `setEnvironment`        | `surge-cli set <key> <value>` | exit-code           |
 
-> `--raw` is a global flag (placed right after the binary) that makes `surge` emit
-> machine-readable output for the query commands; the parsers in `parsers.ts` consume it.
+Real `--raw` shapes (from the Surge CLI):
 
-> The `surge` binary name, path, and per-command argv are **configurable per connection**
-> (`SurgeProfile`) so the catalog adapts to forks/wrappers or a non-standard install.
-> Defaults assume a POSIX `surge` in `$PATH`.
+```jsonc
+// dump policy
+{"proxies":["UK","US",...],"policy-groups":["Relay","Apple",...]}
+// test-all-policies
+{"UK":{"tcp":66,"receive":415,"available":69,"round-one-total":1055},
+ "CA":{"error":"Socket closed by remote peer","available":0}}
+```
+
+> The binary name/path is **configurable per connection** (`SurgeProfile.bin`). The default
+> is `surge-cli`; on macOS the full path is usually
+> `/Applications/Surge.app/Contents/Applications/surge-cli`. Surge also has its own
+> `--remote password@host:port` flag, which can be added via `SurgeProfile` argv overrides if
+> you prefer Surge's native remote channel over the SSH transport.
 
 The catalog is defined once in `packages/shared/src/commands.ts` and mirrored in
 `flutter/lib/core/commands.dart`.
@@ -81,7 +96,8 @@ Core entities (see `packages/shared/src/types.ts`):
 - **HostConfig** — id, label, host, port, username, auth method, surge profile.
 - **SurgeProfile** — binary path + argv overrides for the command catalog.
 - **ConnectionState** — `disconnected | connecting | connected | error`.
-- **SurgeStatus / Policy / PolicyGroup / Rule / Traffic / LogLine** — parsed domain models.
+- **Environment / PolicyDump / PolicyTest / Rule / ActiveConnection / Traffic / LogLine** —
+  parsed domain models.
 
 ## 4. Security
 

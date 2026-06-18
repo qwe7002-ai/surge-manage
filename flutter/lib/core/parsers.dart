@@ -19,38 +19,50 @@ dynamic _tryJson(String text) {
 num? _num(dynamic v) => v is num ? v : null;
 String? _str(dynamic v) => v is String ? v : null;
 
-SurgeStatus parseStatus(String stdout) {
+Environment parseEnvironment(String stdout) {
   final json = _tryJson(stdout);
+  final fields = <String, String>{};
   if (json is Map) {
-    return SurgeStatus(
-      running: json['running'] == true || json['status'] == 'running',
-      version: _str(json['version']),
-      mode: _str(json['mode']) ?? _str(json['outboundMode']),
-      uptimeSeconds: _num(json['uptime'])?.toInt() ?? _num(json['uptimeSeconds'])?.toInt(),
-      outboundMode: _str(json['outboundMode']) ?? _str(json['mode']),
-      activePolicy: _str(json['activePolicy']) ?? _str(json['policy']),
-    );
+    json.forEach((k, v) {
+      if (v == null) return;
+      fields['$k'] = v is Map || v is List ? jsonEncode(v) : '$v';
+    });
   }
-  final text = stdout.toLowerCase();
-  final running = RegExp(r'running|active|started').hasMatch(text) &&
-      !RegExp(r'not running|stopped').hasMatch(text);
-  return SurgeStatus(running: running);
+  return Environment(fields: fields, raw: json ?? stdout);
 }
 
-List<PolicyGroup> parsePolicies(String stdout) {
+List<String> _names(dynamic v) =>
+    v is List ? v.map((m) => '$m').toList() : const [];
+
+/// `surge --raw dump policy` → {"proxies":[...],"policy-groups":[...]}
+PolicyDump parsePolicies(String stdout) {
   final json = _tryJson(stdout);
-  if (json is List) {
-    return json.whereType<Map>().map((g) {
-      final members = (g['members'] ?? g['all']);
-      return PolicyGroup(
-        name: _str(g['name']) ?? '',
-        type: _str(g['type']) ?? 'select',
-        selected: _str(g['selected']) ?? _str(g['now']),
-        members: members is List ? members.map((m) => '$m').toList() : const [],
-      );
-    }).where((g) => g.name.isNotEmpty).toList();
+  if (json is Map) {
+    return PolicyDump(
+      proxies: _names(json['proxies']),
+      groups: _names(json['policy-groups'] ?? json['policyGroups'] ?? json['groups']),
+    );
   }
-  return const [];
+  return const PolicyDump();
+}
+
+/// `surge --raw test-all-policies` → {"UK":{"tcp":66,"receive":415,...}, ...}
+List<PolicyTest> parsePolicyTests(String stdout) {
+  final json = _tryJson(stdout);
+  if (json is! Map) return const [];
+  final out = <PolicyTest>[];
+  json.forEach((name, value) {
+    if (value is! Map) return;
+    out.add(PolicyTest(
+      name: '$name',
+      tcpMs: _num(value['tcp'])?.toInt(),
+      receiveMs: _num(value['receive'])?.toInt(),
+      available: _num(value['available'])?.toInt(),
+      roundOneTotal: _num(value['round-one-total'])?.toInt(),
+      error: _str(value['error']),
+    ));
+  });
+  return out;
 }
 
 List<Rule> parseRules(String stdout) {
@@ -80,18 +92,46 @@ List<Rule> parseRules(String stdout) {
   return out;
 }
 
-Traffic parseTraffic(String stdout) {
+/// `surge --raw dump active` → list of active connections.
+List<ActiveConnection> parseActive(String stdout) {
   final json = _tryJson(stdout);
-  if (json is Map) {
-    return Traffic(
-      uploadBps: _num(json['uploadBps']) ?? _num(json['up']),
-      downloadBps: _num(json['downloadBps']) ?? _num(json['down']),
-      uploadTotal: _num(json['uploadTotal']) ?? _num(json['upTotal']),
-      downloadTotal: _num(json['downloadTotal']) ?? _num(json['downTotal']),
-      connections: _num(json['connections'])?.toInt() ?? _num(json['conns'])?.toInt(),
+  final list = json is List
+      ? json
+      : (json is Map && json['connections'] is List)
+          ? json['connections'] as List
+          : const [];
+  var i = 0;
+  return list.whereType<Map>().map((c) {
+    final conn = ActiveConnection(
+      id: _str(c['id']) ?? _str(c['connectionId']) ?? '${i}',
+      remote: _str(c['remoteAddress']) ??
+          _str(c['remote']) ??
+          _str(c['host']) ??
+          _str(c['url']) ??
+          '—',
+      policy: _str(c['policyName']) ?? _str(c['policy']) ?? _str(c['proxy']),
+      rule: _str(c['rule']),
+      uploadBytes: _num(c['outBytes']) ?? _num(c['uploadBytes']) ?? _num(c['upload']),
+      downloadBytes: _num(c['inBytes']) ?? _num(c['downloadBytes']) ?? _num(c['download']),
     );
+    i++;
+    return conn;
+  }).toList();
+}
+
+/// Aggregate `dump active` connections into dashboard totals.
+Traffic aggregateTraffic(List<ActiveConnection> connections) {
+  num up = 0;
+  num down = 0;
+  for (final c in connections) {
+    up += c.uploadBytes ?? 0;
+    down += c.downloadBytes ?? 0;
   }
-  return const Traffic();
+  return Traffic(
+    connections: connections.length,
+    uploadTotal: up == 0 ? null : up,
+    downloadTotal: down == 0 ? null : down,
+  );
 }
 
 const _levels = [

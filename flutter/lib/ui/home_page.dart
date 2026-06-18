@@ -49,7 +49,7 @@ class _ManageView extends StatelessWidget {
               FTabEntry(label: Text('Dashboard'), child: DashboardPanel()),
               FTabEntry(label: Text('Policies'), child: PoliciesPanel()),
               FTabEntry(label: Text('Rules'), child: RulesPanel()),
-              FTabEntry(label: Text('Logs'), child: LogsPanel()),
+              FTabEntry(label: Text('Requests'), child: LogsPanel()),
               FTabEntry(label: Text('Config'), child: ConfigPanel()),
             ],
           ),

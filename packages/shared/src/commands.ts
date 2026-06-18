@@ -21,25 +21,58 @@ export interface CommandSpec {
 const PLACEHOLDER = /^\{(\d+)\}$/;
 
 export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
-  version: { action: "version", argv: ["--version"], mutates: false, arity: 0 },
-  status: { action: "status", argv: ["--raw", "status"], mutates: false, arity: 0 },
-  start: { action: "start", argv: ["start"], mutates: true, arity: 0 },
-  stop: { action: "stop", argv: ["stop"], mutates: true, arity: 0 },
-  restart: { action: "restart", argv: ["restart"], mutates: true, arity: 0 },
+  // lifecycle / profile
   reload: { action: "reload", argv: ["reload"], mutates: true, arity: 0 },
-  policies: { action: "policies", argv: ["--raw", "policy", "list"], mutates: false, arity: 0 },
-  selectPolicy: {
-    action: "selectPolicy",
-    argv: ["policy", "select", "{0}", "{1}"],
+  stop: { action: "stop", argv: ["stop"], mutates: true, arity: 0 },
+  switchProfile: {
+    action: "switchProfile",
+    argv: ["switch-profile", "{0}"],
     mutates: true,
-    arity: 2,
+    arity: 1,
   },
-  rules: { action: "rules", argv: ["--raw", "rule", "list"], mutates: false, arity: 0 },
-  traffic: { action: "traffic", argv: ["--raw", "traffic"], mutates: false, arity: 0 },
-  logsTail: { action: "logsTail", argv: ["log", "--follow"], mutates: false, streaming: true, arity: 0 },
-  configPath: { action: "configPath", argv: ["config", "path"], mutates: false, arity: 0 },
-  configShow: { action: "configShow", argv: ["config", "show"], mutates: false, arity: 0 },
-  test: { action: "test", argv: ["test", "{0}"], mutates: false, arity: 1 },
+  // inspection (--raw → JSON)
+  environment: { action: "environment", argv: ["--raw", "environment"], mutates: false, arity: 0 },
+  dumpPolicy: { action: "dumpPolicy", argv: ["--raw", "dump", "policy"], mutates: false, arity: 0 },
+  dumpRule: { action: "dumpRule", argv: ["--raw", "dump", "rule"], mutates: false, arity: 0 },
+  dumpActive: { action: "dumpActive", argv: ["--raw", "dump", "active"], mutates: false, arity: 0 },
+  dumpRequest: { action: "dumpRequest", argv: ["--raw", "dump", "request"], mutates: false, arity: 0 },
+  dumpDns: { action: "dumpDns", argv: ["--raw", "dump", "dns"], mutates: false, arity: 0 },
+  dumpProfileEffective: {
+    action: "dumpProfileEffective",
+    argv: ["dump", "profile", "effective"],
+    mutates: false,
+    arity: 0,
+  },
+  dumpProfileOriginal: {
+    action: "dumpProfileOriginal",
+    argv: ["dump", "profile", "original"],
+    mutates: false,
+    arity: 0,
+  },
+  // streaming
+  watchRequest: {
+    action: "watchRequest",
+    argv: ["watch", "request"],
+    mutates: false,
+    streaming: true,
+    arity: 0,
+  },
+  // testing
+  testNetwork: { action: "testNetwork", argv: ["test-network"], mutates: false, arity: 0 },
+  testPolicy: { action: "testPolicy", argv: ["test-policy", "{0}"], mutates: false, arity: 1 },
+  testAllPolicies: {
+    action: "testAllPolicies",
+    argv: ["test-all-policies"],
+    mutates: false,
+    arity: 0,
+  },
+  testGroup: { action: "testGroup", argv: ["test-group", "{0}"], mutates: true, arity: 1 },
+  // operations
+  flushDns: { action: "flushDns", argv: ["flush", "dns"], mutates: true, arity: 0 },
+  diagnostics: { action: "diagnostics", argv: ["diagnostics"], mutates: false, arity: 0 },
+  kill: { action: "kill", argv: ["kill", "{0}"], mutates: true, arity: 1 },
+  setLogLevel: { action: "setLogLevel", argv: ["set-log-level", "{0}"], mutates: true, arity: 1 },
+  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}", "{1}"], mutates: true, arity: 2 },
 };
 
 /** Shell-quote a single token for safe interpolation into a remote command. */

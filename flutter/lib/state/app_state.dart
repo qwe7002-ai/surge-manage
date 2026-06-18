@@ -15,14 +15,16 @@ class AppState extends ChangeNotifier {
   String? selectedHostId;
   ConnectionState connection = const ConnectionState();
 
-  SurgeStatus? status;
-  List<PolicyGroup> policies = [];
+  Environment? environment;
+  PolicyDump? policies;
+  final Map<String, PolicyTest> policyTests = {};
   List<Rule> rules = [];
   Traffic? traffic;
   final List<LogLine> logs = [];
   bool logStreaming = false;
   bool busy = false;
   String? lastError;
+  String? lastInfo;
 
   static const _maxLogLines = 2000;
 
@@ -88,7 +90,7 @@ class AppState extends ChangeNotifier {
   void _onState(ConnectionState s) {
     connection = s;
     if (s.phase == ConnectionPhase.connected) {
-      unawaited(refreshStatus());
+      unawaited(refreshEnvironment());
       unawaited(refreshPolicies());
       unawaited(refreshTraffic());
       _trafficTimer?.cancel();
@@ -98,8 +100,9 @@ class AppState extends ChangeNotifier {
       _trafficTimer?.cancel();
       if (s.phase == ConnectionPhase.disconnected ||
           s.phase == ConnectionPhase.error) {
-        status = null;
-        policies = [];
+        environment = null;
+        policies = null;
+        policyTests.clear();
         rules = [];
         traffic = null;
         logStreaming = false;
@@ -119,6 +122,7 @@ class AppState extends ChangeNotifier {
   Future<void> _guard(Future<void> Function() fn) async {
     busy = true;
     lastError = null;
+    lastInfo = null;
     notifyListeners();
     try {
       await fn();
@@ -130,41 +134,55 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshStatus() => _guard(() async {
-        final r = await _manager!.run(SurgeAction.status);
-        status = parseStatus(r.stdout);
+  Future<void> refreshEnvironment() => _guard(() async {
+        final r = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(r.stdout);
       });
 
   Future<void> refreshPolicies() => _guard(() async {
-        final r = await _manager!.run(SurgeAction.policies);
+        final r = await _manager!.run(SurgeAction.dumpPolicy);
         policies = parsePolicies(r.stdout);
       });
 
   Future<void> refreshRules() => _guard(() async {
-        final r = await _manager!.run(SurgeAction.rules);
+        final r = await _manager!.run(SurgeAction.dumpRule);
         rules = parseRules(r.stdout);
       });
 
   Future<void> refreshTraffic() async {
     try {
-      final r = await _manager!.run(SurgeAction.traffic);
-      traffic = parseTraffic(r.stdout);
+      final r = await _manager!.run(SurgeAction.dumpActive);
+      traffic = aggregateTraffic(parseActive(r.stdout));
       notifyListeners();
     } catch (_) {
       /* best-effort polling */
     }
   }
 
-  Future<void> selectPolicy(String group, String member) => _guard(() async {
-        await _manager!.run(SurgeAction.selectPolicy, [group, member]);
-        final r = await _manager!.run(SurgeAction.policies);
-        policies = parsePolicies(r.stdout);
+  void _mergeTests(List<PolicyTest> tests) {
+    for (final t in tests) {
+      policyTests[t.name] = t;
+    }
+  }
+
+  Future<void> testAllPolicies() => _guard(() async {
+        final r = await _manager!.run(SurgeAction.testAllPolicies);
+        _mergeTests(parsePolicyTests(r.stdout));
       });
 
-  Future<void> power(SurgeAction action) => _guard(() async {
-        await _manager!.run(action);
-        final r = await _manager!.run(SurgeAction.status);
-        status = parseStatus(r.stdout);
+  Future<void> testGroup(String name) => _guard(() async {
+        final r = await _manager!.run(SurgeAction.testGroup, [name]);
+        _mergeTests(parsePolicyTests(r.stdout));
+        lastInfo = 'Retested group "$name"';
+      });
+
+  Future<void> runAction(SurgeAction action, [List<String> args = const []]) =>
+      _guard(() async {
+        final r = await _manager!.run(action, args);
+        final text = r.stdout.trim();
+        lastInfo = text.isNotEmpty
+            ? (text.length > 4000 ? text.substring(0, 4000) : text)
+            : '${action.name} ok';
       });
 
   Future<CommandResult> runConfig(SurgeAction action) =>

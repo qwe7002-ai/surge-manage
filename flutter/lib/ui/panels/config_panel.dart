@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/types.dart';
@@ -13,7 +12,7 @@ class ConfigPanel extends StatefulWidget {
 }
 
 class _ConfigPanelState extends State<ConfigPanel> {
-  String _path = '';
+  bool _effective = true;
   String _content = '';
   bool _loading = false;
   String? _error;
@@ -30,14 +29,12 @@ class _ConfigPanelState extends State<ConfigPanel> {
       _error = null;
     });
     try {
-      final state = context.read<AppState>();
-      final path = await state.runConfig(SurgeAction.configPath);
-      final content = await state.runConfig(SurgeAction.configShow);
+      final action = _effective
+          ? SurgeAction.dumpProfileEffective
+          : SurgeAction.dumpProfileOriginal;
+      final r = await context.read<AppState>().runConfig(action);
       if (!mounted) return;
-      setState(() {
-        _path = path.stdout.trim();
-        _content = content.stdout;
-      });
+      setState(() => _content = r.stdout);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -52,17 +49,21 @@ class _ConfigPanelState extends State<ConfigPanel> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                _path.isEmpty ? 'Configuration' : _path,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Colors.white54),
-              ),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Effective')),
+                ButtonSegment(value: false, label: Text('Original')),
+              ],
+              selected: {_effective},
+              onSelectionChanged: (s) {
+                setState(() => _effective = s.first);
+                _load();
+              },
             ),
-            FButton.icon(
-              style: FButtonStyle.ghost,
-              onPress: _loading ? null : _load,
-              child: const Icon(Icons.refresh, size: 18),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 18),
+              onPressed: _loading ? null : _load,
             ),
           ],
         ),
@@ -84,7 +85,7 @@ class _ConfigPanelState extends State<ConfigPanel> {
             child: SingleChildScrollView(
               child: SelectableText(
                 _content.isEmpty
-                    ? (_loading ? 'Loading…' : 'No configuration returned.')
+                    ? (_loading ? 'Loading…' : 'No profile returned.')
                     : _content,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
               ),

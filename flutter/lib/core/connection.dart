@@ -64,7 +64,7 @@ class ConnectionManager {
     final client = _client;
     if (client == null || _logSession != null) return;
     _logBuffer = '';
-    final cmd = buildCommandLine(_host.surge, SurgeAction.logsTail);
+    final cmd = buildCommandLine(_host.surge, SurgeAction.watchRequest);
     final session = await client.execute(cmd);
     _logSession = session;
     session.stdout.cast<List<int>>().transform(utf8.decoder).listen(_onLogChunk);

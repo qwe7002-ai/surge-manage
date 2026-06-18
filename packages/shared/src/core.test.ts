@@ -1,32 +1,63 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildCommandLine, shellQuote } from "../dist/commands.js";
-import { parseRules, parseStatus, parseTraffic, formatBps } from "../dist/parsers.js";
+import {
+  aggregateTraffic,
+  parseActive,
+  parseEnvironment,
+  parsePolicies,
+  parsePolicyTests,
+  parseRules,
+} from "../dist/parsers.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
 
-test("buildCommandLine fills placeholders and quotes", () => {
-  assert.equal(buildCommandLine(profile, "status"), "surge --raw status");
+test("buildCommandLine maps to real surge commands with --raw", () => {
+  assert.equal(buildCommandLine(profile, "environment"), "surge --raw environment");
+  assert.equal(buildCommandLine(profile, "dumpPolicy"), "surge --raw dump policy");
+  assert.equal(buildCommandLine(profile, "reload"), "surge reload");
   assert.equal(
-    buildCommandLine(profile, "selectPolicy", ["Proxy Group", "🇯🇵 Tokyo"]),
-    "surge policy select 'Proxy Group' '🇯🇵 Tokyo'",
+    buildCommandLine(profile, "switchProfile", ["Home Profile"]),
+    "surge switch-profile 'Home Profile'",
   );
+  assert.equal(buildCommandLine(profile, "kill", ["42"]), "surge kill 42");
 });
 
 test("buildCommandLine enforces arity (injection guard)", () => {
-  assert.throws(() => buildCommandLine(profile, "selectPolicy", ["only-one"]));
-  assert.throws(() => buildCommandLine(profile, "status", ["extra"]));
+  assert.throws(() => buildCommandLine(profile, "testPolicy", []));
+  assert.throws(() => buildCommandLine(profile, "environment", ["extra"]));
 });
 
 test("shellQuote escapes single quotes", () => {
   assert.equal(shellQuote("a'b"), `'a'\\''b'`);
 });
 
-test("parseStatus handles json and text fallback", () => {
-  assert.equal(parseStatus('{"running":true}').running, true);
-  assert.equal(parseStatus("Surge is running").running, true);
-  assert.equal(parseStatus("not running").running, false);
+test("parseEnvironment flattens json", () => {
+  const env = parseEnvironment('{"system-proxy":true,"outbound-mode":"rule"}');
+  assert.equal(env.fields["outbound-mode"], "rule");
+  assert.equal(env.fields["system-proxy"], "true");
+});
+
+test("parsePolicies reads proxies + policy-groups names", () => {
+  const dump = parsePolicies(
+    '{"proxies":["UK","US","CA"],"policy-groups":["Relay","Apple","FINAL"]}',
+  );
+  assert.deepEqual(dump.proxies, ["UK", "US", "CA"]);
+  assert.deepEqual(dump.groups, ["Relay", "Apple", "FINAL"]);
+});
+
+test("parsePolicyTests reads latency + error per proxy", () => {
+  const tests = parsePolicyTests(
+    '{"UK":{"tfo":false,"tcp":66,"receive":415,"available":69,"round-one-total":1055},' +
+      '"CA":{"error":"Socket closed by remote peer","available":0}}',
+  );
+  const uk = tests.find((t) => t.name === "UK")!;
+  assert.equal(uk.tcpMs, 66);
+  assert.equal(uk.receiveMs, 415);
+  assert.equal(uk.available, 69);
+  const ca = tests.find((t) => t.name === "CA")!;
+  assert.equal(ca.error, "Socket closed by remote peer");
 });
 
 test("parseRules parses json and csv fallback", () => {
@@ -38,10 +69,15 @@ test("parseRules parses json and csv fallback", () => {
   assert.equal(csv[1]!.type, "FINAL");
 });
 
-test("parseTraffic + formatBps", () => {
-  const t = parseTraffic('{"uploadBps":2048,"downloadBps":1048576}');
-  assert.equal(t.uploadBps, 2048);
-  assert.equal(formatBps(2048), "2.0 KB/s");
-  assert.equal(formatBps(1048576), "1.0 MB/s");
-  assert.equal(formatBps(0), "0 B/s");
+test("parseActive + aggregateTraffic", () => {
+  const conns = parseActive(
+    '[{"id":"1","remoteAddress":"a:443","policy":"Proxy","inBytes":1000,"outBytes":500},' +
+      '{"id":"2","remoteAddress":"b:80","policy":"DIRECT","inBytes":2000,"outBytes":100}]',
+  );
+  assert.equal(conns.length, 2);
+  assert.equal(conns[0]!.remote, "a:443");
+  const t = aggregateTraffic(conns);
+  assert.equal(t.connections, 2);
+  assert.equal(t.downloadTotal, 3000);
+  assert.equal(t.uploadTotal, 600);
 });

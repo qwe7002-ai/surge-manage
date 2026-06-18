@@ -38,21 +38,38 @@ export interface SurgeProfile {
   argv?: Partial<Record<SurgeAction, string[]>>;
 }
 
+/**
+ * Actions map 1:1 onto real Surge CLI commands (see the CLI reference). Query
+ * actions are run with the global `--raw` flag for JSON output; `watchRequest`
+ * is the only streaming command.
+ */
 export type SurgeAction =
-  | "version"
-  | "status"
-  | "start"
-  | "stop"
-  | "restart"
-  | "reload"
-  | "policies"
-  | "selectPolicy"
-  | "rules"
-  | "traffic"
-  | "logsTail"
-  | "configPath"
-  | "configShow"
-  | "test";
+  // lifecycle / profile
+  | "reload" // reload the main profile
+  | "stop" // shut down Surge
+  | "switchProfile" // switch-profile <name>
+  // inspection (dump *)
+  | "environment" // environment
+  | "dumpPolicy" // dump policy
+  | "dumpRule" // dump rule
+  | "dumpActive" // dump active
+  | "dumpRequest" // dump request
+  | "dumpDns" // dump dns
+  | "dumpProfileEffective" // dump profile effective
+  | "dumpProfileOriginal" // dump profile original
+  // streaming
+  | "watchRequest" // watch request
+  // testing
+  | "testNetwork" // test-network
+  | "testPolicy" // test-policy <name>
+  | "testAllPolicies" // test-all-policies
+  | "testGroup" // test-group <name>
+  // operations
+  | "flushDns" // flush dns
+  | "diagnostics" // diagnostics
+  | "kill" // kill <connection-id>
+  | "setLogLevel" // set-log-level <level>
+  | "setEnvironment"; // set <key-path> <value>
 
 export type ConnectionPhase =
   | "disconnected"
@@ -81,31 +98,31 @@ export interface CommandResult {
 
 /* ----------------------------- Parsed models ----------------------------- */
 
-export interface SurgeStatus {
-  running: boolean;
-  version?: string;
-  mode?: string; // e.g. "rule", "global", "direct"
-  uptimeSeconds?: number;
-  outboundMode?: string;
-  /** Currently active outbound policy, if surge reports one. */
-  activePolicy?: string;
+/** Parsed from `surge --raw environment`. Shape varies, so keep it generic. */
+export interface Environment {
+  /** Flattened key/value view for display. */
+  fields: Record<string, string>;
   raw?: unknown;
 }
 
-export interface Policy {
-  name: string;
-  type: string; // "select" | "url-test" | "fallback" | "direct" | "proxy" | ...
-  /** For a group: the selected member. */
-  selected?: string;
-  /** Last measured latency in ms (for url-test members). */
-  latencyMs?: number;
+/** Parsed from `surge --raw dump policy` → just the names of each. */
+export interface PolicyDump {
+  proxies: string[];
+  groups: string[];
 }
 
-export interface PolicyGroup {
+/**
+ * One proxy's result from `surge --raw test-all-policies` /
+ * `test-policy` / `test-group`. Surge reports TCP-connect and receive (TTFB)
+ * latencies in ms, an availability score, and an error string on failure.
+ */
+export interface PolicyTest {
   name: string;
-  type: string;
-  selected?: string;
-  members: string[];
+  tcpMs?: number;
+  receiveMs?: number;
+  available?: number;
+  roundOneTotal?: number;
+  error?: string;
 }
 
 export interface Rule {
@@ -116,11 +133,21 @@ export interface Rule {
   hits?: number;
 }
 
+/** One entry from `surge --raw dump active`. */
+export interface ActiveConnection {
+  id: string;
+  /** Best-effort description (host:port or remote address). */
+  remote: string;
+  /** Matched policy/proxy for this connection. */
+  policy?: string;
+  rule?: string;
+  uploadBytes?: number;
+  downloadBytes?: number;
+  raw?: unknown;
+}
+
+/** Aggregate derived from `dump active`. */
 export interface Traffic {
-  /** Bytes per second, smoothed, if available. */
-  uploadBps?: number;
-  downloadBps?: number;
-  /** Cumulative bytes since start. */
   uploadTotal?: number;
   downloadTotal?: number;
   /** Active connection count. */

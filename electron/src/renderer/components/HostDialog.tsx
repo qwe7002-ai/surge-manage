@@ -45,7 +45,7 @@ function emptyForm(): FormState {
     username: "root",
     auth: "key",
     privateKeyPath: "",
-    surgeBin: "surge",
+    surgeBin: "surge-cli",
     secret: "",
   };
 }
@@ -93,7 +93,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
       auth: form.auth,
       privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
       secretRef,
-      surge: { bin: form.surgeBin.trim() || "surge" },
+      surge: { bin: form.surgeBin.trim() || "surge-cli" },
       createdAt: initial?.createdAt ?? Date.now(),
       lastConnectedAt: initial?.lastConnectedAt,
     };
@@ -193,7 +193,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
           <Field label="Surge binary">
             <Input
               value={form.surgeBin}
-              placeholder="surge"
+              placeholder="surge-cli (or /Applications/Surge.app/Contents/Applications/surge-cli)"
               onChange={(e) => set("surgeBin", e.target.value)}
             />
           </Field>

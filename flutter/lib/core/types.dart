@@ -6,21 +6,29 @@ import 'package:collection/collection.dart';
 
 enum AuthMethod { key, password, agent }
 
+/// Maps 1:1 onto real Surge CLI commands. Query actions run with `--raw`.
 enum SurgeAction {
-  version,
-  status,
-  start,
-  stop,
-  restart,
   reload,
-  policies,
-  selectPolicy,
-  rules,
-  traffic,
-  logsTail,
-  configPath,
-  configShow,
-  test,
+  stop,
+  switchProfile,
+  environment,
+  dumpPolicy,
+  dumpRule,
+  dumpActive,
+  dumpRequest,
+  dumpDns,
+  dumpProfileEffective,
+  dumpProfileOriginal,
+  watchRequest,
+  testNetwork,
+  testPolicy,
+  testAllPolicies,
+  testGroup,
+  flushDns,
+  diagnostics,
+  kill,
+  setLogLevel,
+  setEnvironment,
 }
 
 enum ConnectionPhase {
@@ -34,7 +42,7 @@ enum LogLevel { debug, info, notify, warning, error, unknown }
 
 /// Per-host customisation of how the `surge` binary is invoked.
 class SurgeProfile {
-  const SurgeProfile({this.bin = 'surge', this.argv = const {}});
+  const SurgeProfile({this.bin = 'surge-cli', this.argv = const {}});
 
   final String bin;
   final Map<SurgeAction, List<String>> argv;
@@ -56,7 +64,7 @@ class SurgeProfile {
         parsed[action] = (entry.value as List).cast<String>();
       }
     }
-    return SurgeProfile(bin: (j['bin'] as String?) ?? 'surge', argv: parsed);
+    return SurgeProfile(bin: (j['bin'] as String?) ?? 'surge-cli', argv: parsed);
   }
 }
 
@@ -151,36 +159,38 @@ class CommandResult {
   final int durationMs;
 }
 
-class SurgeStatus {
-  const SurgeStatus({
-    required this.running,
-    this.version,
-    this.mode,
-    this.uptimeSeconds,
-    this.outboundMode,
-    this.activePolicy,
-  });
-
-  final bool running;
-  final String? version;
-  final String? mode;
-  final int? uptimeSeconds;
-  final String? outboundMode;
-  final String? activePolicy;
+class Environment {
+  const Environment({this.fields = const {}, this.raw});
+  final Map<String, String> fields;
+  final dynamic raw;
 }
 
-class PolicyGroup {
-  const PolicyGroup({
+/// From `surge --raw dump policy` → names of proxies and policy groups.
+class PolicyDump {
+  const PolicyDump({this.proxies = const [], this.groups = const []});
+  final List<String> proxies;
+  final List<String> groups;
+}
+
+/// One proxy's result from `test-all-policies` / `test-policy` / `test-group`.
+class PolicyTest {
+  const PolicyTest({
     required this.name,
-    required this.type,
-    this.selected,
-    this.members = const [],
+    this.tcpMs,
+    this.receiveMs,
+    this.available,
+    this.roundOneTotal,
+    this.error,
   });
 
   final String name;
-  final String type;
-  final String? selected;
-  final List<String> members;
+  final int? tcpMs;
+  final int? receiveMs;
+  final int? available;
+  final int? roundOneTotal;
+  final String? error;
+
+  int? get latencyMs => receiveMs ?? tcpMs;
 }
 
 class Rule {
@@ -197,17 +207,27 @@ class Rule {
   final int? hits;
 }
 
-class Traffic {
-  const Traffic({
-    this.uploadBps,
-    this.downloadBps,
-    this.uploadTotal,
-    this.downloadTotal,
-    this.connections,
+class ActiveConnection {
+  const ActiveConnection({
+    required this.id,
+    required this.remote,
+    this.policy,
+    this.rule,
+    this.uploadBytes,
+    this.downloadBytes,
   });
 
-  final num? uploadBps;
-  final num? downloadBps;
+  final String id;
+  final String remote;
+  final String? policy;
+  final String? rule;
+  final num? uploadBytes;
+  final num? downloadBytes;
+}
+
+class Traffic {
+  const Traffic({this.uploadTotal, this.downloadTotal, this.connections});
+
   final num? uploadTotal;
   final num? downloadTotal;
   final int? connections;

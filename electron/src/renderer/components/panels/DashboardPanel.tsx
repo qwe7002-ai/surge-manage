@@ -1,152 +1,173 @@
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  CircleSlash,
-  Gauge,
-  Play,
+  Activity,
   RefreshCw,
   RotateCw,
   Square,
+  Stethoscope,
+  Waves,
+  Wind,
 } from "lucide-react";
-import { formatBps } from "@surge-manage/shared";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Disconnected } from "@/components/Disconnected";
 import { useApp } from "@/store/app-store";
 import { useInterval } from "@/hooks/use-interval";
 
+const LOG_LEVELS = ["verbose", "info", "notify", "warning"];
+
 export function DashboardPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
-  const status = useApp((s) => s.status);
+  const environment = useApp((s) => s.environment);
   const traffic = useApp((s) => s.traffic);
   const busy = useApp((s) => s.busy);
-  const refreshStatus = useApp((s) => s.refreshStatus);
+  const lastInfo = useApp((s) => s.lastInfo);
+  const refreshEnvironment = useApp((s) => s.refreshEnvironment);
   const refreshTraffic = useApp((s) => s.refreshTraffic);
-  const power = useApp((s) => s.power);
+  const runAction = useApp((s) => s.runAction);
 
-  // Live-poll traffic while connected and viewing the dashboard.
+  // Live-poll active connections while connected and viewing the dashboard.
   useInterval(() => void refreshTraffic(), connected ? 3000 : null);
 
   if (!connected) {
-    return <Disconnected hint="Select a host and press Connect to view live status." />;
+    return <Disconnected hint="Select a host and press Connect to view live state." />;
   }
+
+  const envEntries = Object.entries(environment?.fields ?? {});
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="md:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Surge daemon
-              {status?.running ? (
-                <Badge variant="success">Running</Badge>
-              ) : (
-                <Badge variant="destructive">Stopped</Badge>
-              )}
+              Environment
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6"
+                disabled={busy}
+                onClick={() => void refreshEnvironment()}
+              >
+                <RefreshCw />
+              </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1">
-            <Stat label="Version" value={status?.version ?? "—"} />
-            <Stat label="Outbound mode" value={status?.outboundMode ?? status?.mode ?? "—"} />
-            <Stat label="Active policy" value={status?.activePolicy ?? "—"} />
-            <Stat label="Uptime" value={formatUptime(status?.uptimeSeconds)} />
+          <CardContent className="grid gap-1 sm:grid-cols-2">
+            {envEntries.length === 0 && (
+              <span className="text-sm text-muted-foreground">No data.</span>
+            )}
+            {envEntries.map(([k, v]) => (
+              <div key={k} className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="truncate text-muted-foreground">{k}</span>
+                <span className="truncate font-medium">{v}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Gauge className="h-4 w-4" /> Throughput
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex items-center gap-2">
-              <ArrowDownToLine className="h-4 w-4 text-emerald-500" />
-              <span className="text-xl font-semibold tabular-nums">
-                {formatBps(traffic?.downloadBps)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ArrowUpFromLine className="h-4 w-4 text-sky-500" />
-              <span className="text-xl font-semibold tabular-nums">
-                {formatBps(traffic?.uploadBps)}
-              </span>
-            </div>
-            <Stat
-              label="Active connections"
-              value={traffic?.connections != null ? String(traffic.connections) : "—"}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Totals
+              <Activity className="h-4 w-4" /> Connections
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            <Stat label="Downloaded" value={formatBytes(traffic?.downloadTotal)} />
-            <Stat label="Uploaded" value={formatBytes(traffic?.uploadTotal)} />
+            <div className="text-3xl font-semibold tabular-nums">
+              {traffic?.connections ?? 0}
+            </div>
+            <p className="text-xs text-muted-foreground">active connections</p>
+            <Stat label="Down (session)" value={formatBytes(traffic?.downloadTotal)} />
+            <Stat label="Up (session)" value={formatBytes(traffic?.uploadTotal)} />
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Daemon control</CardTitle>
+          <CardTitle className="text-sm font-medium">Control</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={busy} onClick={() => void power("start")}>
-            <Play /> Start
+        <CardContent className="flex flex-wrap items-center gap-2">
+          <Button size="sm" disabled={busy} onClick={() => void runAction("reload")}>
+            <RotateCw /> Reload profile
           </Button>
           <Button
             size="sm"
             variant="secondary"
             disabled={busy}
-            onClick={() => void power("reload")}
+            onClick={() => void runAction("flushDns")}
           >
-            <RefreshCw /> Reload config
+            <Wind /> Flush DNS
           </Button>
           <Button
             size="sm"
             variant="secondary"
             disabled={busy}
-            onClick={() => void power("restart")}
+            onClick={() => void runAction("testNetwork")}
           >
-            <RotateCw /> Restart
+            <Waves /> Test network
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void runAction("diagnostics")}
+          >
+            <Stethoscope /> Diagnostics
+          </Button>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Log level</span>
+            <Select onValueChange={(v) => void runAction("setLogLevel", [v])}>
+              <SelectTrigger className="h-8 w-32">
+                <SelectValue placeholder="set…" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOG_LEVELS.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
             size="sm"
             variant="destructive"
-            disabled={busy}
-            onClick={() => void power("stop")}
-          >
-            <Square /> Stop
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
             className="ml-auto"
             disabled={busy}
-            onClick={() => void refreshStatus()}
+            onClick={() => void runAction("stop")}
           >
-            <RefreshCw /> Refresh
+            <Square /> Stop Surge
           </Button>
         </CardContent>
       </Card>
 
-      {status && !status.running && (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CircleSlash className="h-3.5 w-3.5" />
-          The surge daemon is not running on this host.
-        </p>
+      {lastInfo && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Last result
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-black/30 p-2 font-mono text-xs">
+              {lastInfo}
+            </pre>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -159,16 +180,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span className="font-medium tabular-nums">{value}</span>
     </div>
   );
-}
-
-function formatUptime(seconds?: number): string {
-  if (!seconds || seconds <= 0) return "—";
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
 
 function formatBytes(bytes?: number): string {

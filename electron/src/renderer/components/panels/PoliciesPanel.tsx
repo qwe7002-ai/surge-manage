@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { RefreshCw } from "lucide-react";
+import { Gauge, RefreshCw } from "lucide-react";
+import type { PolicyTest } from "@surge-manage/shared";
 import {
   Card,
   CardContent,
@@ -8,22 +9,17 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Disconnected } from "@/components/Disconnected";
 import { useApp } from "@/store/app-store";
 
 export function PoliciesPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
   const policies = useApp((s) => s.policies);
+  const policyTests = useApp((s) => s.policyTests);
   const busy = useApp((s) => s.busy);
   const refreshPolicies = useApp((s) => s.refreshPolicies);
-  const selectPolicy = useApp((s) => s.selectPolicy);
+  const testAllPolicies = useApp((s) => s.testAllPolicies);
+  const testGroup = useApp((s) => s.testGroup);
 
   useEffect(() => {
     if (connected) void refreshPolicies();
@@ -31,56 +27,91 @@ export function PoliciesPanel() {
 
   if (!connected) return <Disconnected />;
 
+  const proxies = policies?.proxies ?? [];
+  const groups = policies?.groups ?? [];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">
-          Policy groups ({policies.length})
+          {groups.length} groups · {proxies.length} proxies
         </h2>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          onClick={() => void refreshPolicies()}
-        >
-          <RefreshCw /> Refresh
-        </Button>
+        <div className="flex gap-1.5">
+          <Button size="sm" disabled={busy} onClick={() => void testAllPolicies()}>
+            <Gauge /> Test all
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void refreshPolicies()}
+          >
+            <RefreshCw /> Refresh
+          </Button>
+        </div>
       </div>
 
-      {policies.length === 0 && (
-        <p className="text-sm text-muted-foreground">No selectable policy groups reported.</p>
-      )}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Policy groups</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {groups.length === 0 && (
+            <span className="text-sm text-muted-foreground">No policy groups.</span>
+          )}
+          {groups.map((g) => (
+            <Button
+              key={g}
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              title="Retest this group"
+              onClick={() => void testGroup(g)}
+            >
+              {g}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {policies.map((group) => (
-          <Card key={group.name}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between text-sm">
-                <span className="truncate">{group.name}</span>
-                <Badge variant="outline">{group.type}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={group.selected ?? undefined}
-                disabled={busy || group.members.length === 0}
-                onValueChange={(member) => void selectPolicy(group.name, member)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select policy…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {group.members.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Proxies</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-1.5 sm:grid-cols-2">
+          {proxies.map((p) => (
+            <ProxyRow key={p} name={p} test={policyTests[p]} />
+          ))}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function ProxyRow({ name, test }: { name: string; test?: PolicyTest }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm">
+      <span className="truncate">{name}</span>
+      <Latency test={test} />
+    </div>
+  );
+}
+
+function Latency({ test }: { test?: PolicyTest }) {
+  if (!test) return <span className="text-xs text-muted-foreground">—</span>;
+  if (test.error) {
+    return (
+      <Badge variant="destructive" className="text-[10px]" title={test.error}>
+        failed
+      </Badge>
+    );
+  }
+  const ms = test.receiveMs ?? test.tcpMs;
+  if (ms == null) return <span className="text-xs text-muted-foreground">—</span>;
+  const variant = ms < 300 ? "success" : ms < 800 ? "secondary" : "destructive";
+  return (
+    <Badge variant={variant} className="text-[10px] tabular-nums">
+      {ms} ms
+    </Badge>
   );
 }

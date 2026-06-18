@@ -1,9 +1,10 @@
 import type {
+  ActiveConnection,
+  Environment,
   LogLine,
-  Policy,
-  PolicyGroup,
+  PolicyDump,
+  PolicyTest,
   Rule,
-  SurgeStatus,
   Traffic,
 } from "./types.js";
 
@@ -40,62 +41,61 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-export function parseStatus(stdout: string): SurgeStatus {
-  const json = asRecord(tryJson(stdout));
-  if (json) {
-    return {
-      running: json.running === true || json.status === "running",
-      version: str(json.version),
-      mode: str(json.mode) ?? str(json.outboundMode),
-      uptimeSeconds: num(json.uptime) ?? num(json.uptimeSeconds),
-      outboundMode: str(json.outboundMode) ?? str(json.mode),
-      activePolicy: str(json.activePolicy) ?? str(json.policy),
-      raw: json,
-    };
+/** Flatten `surge --raw environment` JSON into displayable key/value pairs. */
+export function parseEnvironment(stdout: string): Environment {
+  const json = tryJson(stdout);
+  const fields: Record<string, string> = {};
+  const rec = asRecord(json);
+  if (rec) {
+    for (const [k, v] of Object.entries(rec)) {
+      if (v === null || v === undefined) continue;
+      fields[k] =
+        typeof v === "object" ? JSON.stringify(v) : String(v);
+    }
   }
-  // Fallback: plain text. "running" presence is a good-enough heuristic.
-  const text = stdout.toLowerCase();
+  return { fields, raw: json ?? stdout };
+}
+
+function toNames(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((m) => str(m) ?? String(m)) : [];
+}
+
+/**
+ * `surge --raw dump policy` →
+ *   {"proxies":["UK","US",...],"policy-groups":["Relay","Apple",...]}
+ */
+export function parsePolicies(stdout: string): PolicyDump {
+  const rec = asRecord(tryJson(stdout));
   return {
-    running: /running|active|started/.test(text) && !/not running|stopped/.test(text),
-    raw: stdout,
+    proxies: toNames(rec?.proxies),
+    groups: toNames(rec?.["policy-groups"] ?? rec?.policyGroups ?? rec?.groups),
   };
 }
 
-export function parsePolicies(stdout: string): PolicyGroup[] {
-  const json = tryJson(stdout);
-  if (Array.isArray(json)) {
-    return json
-      .map(asRecord)
-      .filter((g): g is Record<string, unknown> => !!g)
-      .map((g) => ({
-        name: str(g.name) ?? "",
-        type: str(g.type) ?? "select",
-        selected: str(g.selected) ?? str(g.now),
-        members: Array.isArray(g.members)
-          ? g.members.map((m) => str(m) ?? String(m))
-          : Array.isArray(g.all)
-            ? g.all.map((m) => str(m) ?? String(m))
-            : [],
-      }))
-      .filter((g) => g.name);
+/**
+ * `surge --raw test-all-policies` / `test-policy` / `test-group` →
+ *   {"UK":{"tcp":66,"receive":415,"available":69,"round-one-total":1055},
+ *    "CA":{"error":"Socket closed by remote peer","available":0}, ...}
+ */
+export function parsePolicyTests(stdout: string): PolicyTest[] {
+  const rec = asRecord(tryJson(stdout));
+  if (!rec) return [];
+  const out: PolicyTest[] = [];
+  for (const [name, value] of Object.entries(rec)) {
+    const r = asRecord(value);
+    if (!r) continue;
+    out.push({
+      name,
+      tcpMs: num(r.tcp),
+      receiveMs: num(r.receive),
+      available: num(r.available),
+      roundOneTotal: num(r["round-one-total"]),
+      error: str(r.error),
+    });
   }
-  return [];
+  return out;
 }
 
-export function parsePolicyLatencies(stdout: string): Policy[] {
-  const json = tryJson(stdout);
-  if (!Array.isArray(json)) return [];
-  return json
-    .map(asRecord)
-    .filter((p): p is Record<string, unknown> => !!p)
-    .map((p) => ({
-      name: str(p.name) ?? "",
-      type: str(p.type) ?? "proxy",
-      selected: str(p.selected),
-      latencyMs: num(p.latency) ?? num(p.delay) ?? num(p.latencyMs),
-    }))
-    .filter((p) => p.name);
-}
 
 export function parseRules(stdout: string): Rule[] {
   const json = tryJson(stdout);
@@ -130,19 +130,46 @@ export function parseRules(stdout: string): Rule[] {
     .filter((r): r is Rule => !!r);
 }
 
-export function parseTraffic(stdout: string): Traffic {
-  const json = asRecord(tryJson(stdout));
-  if (json) {
-    return {
-      uploadBps: num(json.uploadBps) ?? num(json.up),
-      downloadBps: num(json.downloadBps) ?? num(json.down),
-      uploadTotal: num(json.uploadTotal) ?? num(json.upTotal),
-      downloadTotal: num(json.downloadTotal) ?? num(json.downTotal),
-      connections: num(json.connections) ?? num(json.conns),
-      raw: json,
-    };
+/** Parse `surge --raw dump active` into a connection list. */
+export function parseActive(stdout: string): ActiveConnection[] {
+  const json = tryJson(stdout);
+  const list = Array.isArray(json)
+    ? json
+    : Array.isArray(asRecord(json)?.connections)
+      ? (asRecord(json)!.connections as unknown[])
+      : [];
+  return list
+    .map(asRecord)
+    .filter((c): c is Record<string, unknown> => !!c)
+    .map((c, i) => ({
+      id: str(c.id) ?? str(c.connectionId) ?? String(i),
+      remote:
+        str(c.remoteAddress) ??
+        str(c.remote) ??
+        str(c.host) ??
+        str(c.url) ??
+        "—",
+      policy: str(c.policyName) ?? str(c.policy) ?? str(c.proxy),
+      rule: str(c.rule),
+      uploadBytes: num(c.outBytes) ?? num(c.uploadBytes) ?? num(c.upload),
+      downloadBytes: num(c.inBytes) ?? num(c.downloadBytes) ?? num(c.download),
+      raw: c,
+    }));
+}
+
+/** Aggregate `dump active` connections into totals for the dashboard. */
+export function aggregateTraffic(connections: ActiveConnection[]): Traffic {
+  let uploadTotal = 0;
+  let downloadTotal = 0;
+  for (const c of connections) {
+    uploadTotal += c.uploadBytes ?? 0;
+    downloadTotal += c.downloadBytes ?? 0;
   }
-  return { raw: stdout };
+  return {
+    connections: connections.length,
+    uploadTotal: uploadTotal || undefined,
+    downloadTotal: downloadTotal || undefined,
+  };
 }
 
 const LOG_LEVELS = ["debug", "info", "notify", "warning", "error"] as const;

@@ -6,17 +6,21 @@ import 'package:surge_manage/core/types.dart';
 const profile = SurgeProfile();
 
 void main() {
-  test('buildCommandLine fills placeholders and quotes', () {
-    expect(buildCommandLine(profile, SurgeAction.status), 'surge --raw status');
+  test('buildCommandLine maps to real surge commands with --raw', () {
+    expect(buildCommandLine(profile, SurgeAction.environment),
+        'surge-cli --raw environment');
+    expect(buildCommandLine(profile, SurgeAction.dumpPolicy),
+        'surge-cli --raw dump policy');
+    expect(buildCommandLine(profile, SurgeAction.reload), 'surge-cli reload');
     expect(
-      buildCommandLine(profile, SurgeAction.selectPolicy, ['Proxy Group', 'Tokyo 01']),
-      "surge policy select 'Proxy Group' 'Tokyo 01'",
+      buildCommandLine(profile, SurgeAction.switchProfile, ['Home Profile']),
+      "surge-cli switch-profile 'Home Profile'",
     );
   });
 
   test('buildCommandLine enforces arity', () {
     expect(
-      () => buildCommandLine(profile, SurgeAction.selectPolicy, ['one']),
+      () => buildCommandLine(profile, SurgeAction.testPolicy, []),
       throwsArgumentError,
     );
   });
@@ -25,24 +29,41 @@ void main() {
     expect(shellQuote("a'b"), "'a'\\''b'");
   });
 
-  test('parseStatus json and text fallback', () {
-    expect(parseStatus('{"running":true}').running, true);
-    expect(parseStatus('Surge is running').running, true);
-    expect(parseStatus('not running').running, false);
+  test('parseEnvironment flattens json', () {
+    final env = parseEnvironment('{"system-proxy":true,"outbound-mode":"rule"}');
+    expect(env.fields['outbound-mode'], 'rule');
+    expect(env.fields['system-proxy'], 'true');
   });
 
-  test('parseRules json and csv fallback', () {
-    final json = parseRules('[{"type":"FINAL","value":"","policy":"Proxy"}]');
-    expect(json.first.policy, 'Proxy');
-    final csv = parseRules('DOMAIN-SUFFIX,google.com,Proxy\n# c\nFINAL,Direct');
-    expect(csv.length, 2);
-    expect(csv[0].value, 'google.com');
-    expect(csv[1].type, 'FINAL');
+  test('parsePolicies reads proxies + policy-groups', () {
+    final dump = parsePolicies(
+      '{"proxies":["UK","US","CA"],"policy-groups":["Relay","Apple"]}',
+    );
+    expect(dump.proxies, ['UK', 'US', 'CA']);
+    expect(dump.groups, ['Relay', 'Apple']);
   });
 
-  test('formatBps', () {
-    expect(formatBps(2048), '2.0 KB/s');
-    expect(formatBps(1048576), '1.0 MB/s');
-    expect(formatBps(0), '0 B/s');
+  test('parsePolicyTests reads latency + error', () {
+    final tests = parsePolicyTests(
+      '{"UK":{"tcp":66,"receive":415,"available":69,"round-one-total":1055},'
+      '"CA":{"error":"Socket closed by remote peer","available":0}}',
+    );
+    final uk = tests.firstWhere((t) => t.name == 'UK');
+    expect(uk.tcpMs, 66);
+    expect(uk.receiveMs, 415);
+    final ca = tests.firstWhere((t) => t.name == 'CA');
+    expect(ca.error, 'Socket closed by remote peer');
+  });
+
+  test('parseActive + aggregateTraffic', () {
+    final conns = parseActive(
+      '[{"id":"1","remoteAddress":"a:443","inBytes":1000,"outBytes":500},'
+      '{"id":"2","remoteAddress":"b:80","inBytes":2000,"outBytes":100}]',
+    );
+    expect(conns.length, 2);
+    final t = aggregateTraffic(conns);
+    expect(t.connections, 2);
+    expect(t.downloadTotal, 3000);
+    expect(t.uploadTotal, 600);
   });
 }

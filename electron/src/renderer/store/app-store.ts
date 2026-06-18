@@ -1,15 +1,19 @@
 import { create } from "zustand";
 import {
+  aggregateTraffic,
+  parseActive,
+  parseEnvironment,
   parsePolicies,
+  parsePolicyTests,
   parseRules,
-  parseStatus,
-  parseTraffic,
   type ConnectionState,
+  type Environment,
   type HostConfig,
   type LogLine,
-  type PolicyGroup,
+  type PolicyDump,
+  type PolicyTest,
   type Rule,
-  type SurgeStatus,
+  type SurgeAction,
   type Traffic,
 } from "@surge-manage/shared";
 
@@ -19,14 +23,16 @@ interface AppState {
   hosts: HostConfig[];
   selectedHostId: string | null;
   connection: ConnectionState;
-  status: SurgeStatus | null;
-  policies: PolicyGroup[];
+  environment: Environment | null;
+  policies: PolicyDump | null;
+  policyTests: Record<string, PolicyTest>;
   rules: Rule[];
   traffic: Traffic | null;
   logs: LogLine[];
   logStreaming: boolean;
   busy: boolean;
   lastError: string | null;
+  lastInfo: string | null;
 
   init: () => Promise<void>;
   refreshHosts: () => Promise<void>;
@@ -35,12 +41,14 @@ interface AppState {
   removeHost: (id: string) => Promise<void>;
   connect: (id: string) => Promise<void>;
   disconnect: () => Promise<void>;
-  refreshStatus: () => Promise<void>;
+  refreshEnvironment: () => Promise<void>;
   refreshPolicies: () => Promise<void>;
   refreshRules: () => Promise<void>;
   refreshTraffic: () => Promise<void>;
-  selectPolicy: (group: string, member: string) => Promise<void>;
-  power: (action: "start" | "stop" | "restart" | "reload") => Promise<void>;
+  testAllPolicies: () => Promise<void>;
+  testGroup: (name: string) => Promise<void>;
+  /** Run a no-arg or single-arg surge action and surface its result text. */
+  runAction: (action: SurgeAction, args?: string[]) => Promise<void>;
   startLogs: () => Promise<void>;
   stopLogs: () => Promise<void>;
   clearLogs: () => void;
@@ -50,28 +58,31 @@ export const useApp = create<AppState>((set, get) => ({
   hosts: [],
   selectedHostId: null,
   connection: { phase: "disconnected", since: Date.now() },
-  status: null,
-  policies: [],
+  environment: null,
+  policies: null,
+  policyTests: {},
   rules: [],
   traffic: null,
   logs: [],
   logStreaming: false,
   busy: false,
   lastError: null,
+  lastInfo: null,
 
   async init() {
     window.surge.connection.onState((connection) => {
       set({ connection });
       if (connection.phase === "connected") {
         // Pull an initial snapshot once the session is live.
-        void get().refreshStatus();
+        void get().refreshEnvironment();
         void get().refreshPolicies();
         void get().refreshTraffic();
       }
       if (connection.phase === "disconnected" || connection.phase === "error") {
         set({
-          status: null,
-          policies: [],
+          environment: null,
+          policies: null,
+          policyTests: {},
           rules: [],
           traffic: null,
           logStreaming: false,
@@ -126,47 +137,56 @@ export const useApp = create<AppState>((set, get) => ({
     await window.surge.connection.disconnect();
   },
 
-  async refreshStatus() {
+  async refreshEnvironment() {
     await guarded(set, async () => {
-      const r = await window.surge.surge.run("status");
-      set({ status: parseStatus(r.stdout) });
+      const r = await window.surge.surge.run("environment");
+      set({ environment: parseEnvironment(r.stdout) });
     });
   },
 
   async refreshPolicies() {
     await guarded(set, async () => {
-      const r = await window.surge.surge.run("policies");
+      const r = await window.surge.surge.run("dumpPolicy");
       set({ policies: parsePolicies(r.stdout) });
     });
   },
 
   async refreshRules() {
     await guarded(set, async () => {
-      const r = await window.surge.surge.run("rules");
+      const r = await window.surge.surge.run("dumpRule");
       set({ rules: parseRules(r.stdout) });
     });
   },
 
   async refreshTraffic() {
     try {
-      const r = await window.surge.surge.run("traffic");
-      set({ traffic: parseTraffic(r.stdout) });
+      const r = await window.surge.surge.run("dumpActive");
+      set({ traffic: aggregateTraffic(parseActive(r.stdout)) });
     } catch {
-      /* traffic polling is best-effort */
+      /* polling is best-effort */
     }
   },
 
-  async selectPolicy(group, member) {
+  async testAllPolicies() {
     await guarded(set, async () => {
-      await window.surge.surge.run("selectPolicy", [group, member]);
-      await get().refreshPolicies();
+      const r = await window.surge.surge.run("testAllPolicies");
+      mergeTests(set, get, parsePolicyTests(r.stdout));
     });
   },
 
-  async power(action) {
+  async testGroup(name) {
     await guarded(set, async () => {
-      await window.surge.surge.run(action);
-      await get().refreshStatus();
+      const r = await window.surge.surge.run("testGroup", [name]);
+      mergeTests(set, get, parsePolicyTests(r.stdout));
+      set({ lastInfo: `Retested group "${name}"` });
+    });
+  },
+
+  async runAction(action, args = []) {
+    await guarded(set, async () => {
+      const r = await window.surge.surge.run(action, args);
+      const text = r.stdout.trim();
+      set({ lastInfo: text ? text.slice(0, 4000) : `${action} ok` });
     });
   },
 
@@ -196,9 +216,16 @@ export const useApp = create<AppState>((set, get) => ({
 }));
 
 type SetFn = (partial: Partial<AppState>) => void;
+type GetFn = () => AppState;
+
+function mergeTests(set: SetFn, get: GetFn, tests: PolicyTest[]): void {
+  const next = { ...get().policyTests };
+  for (const t of tests) next[t.name] = t;
+  set({ policyTests: next });
+}
 
 async function guarded(set: SetFn, fn: () => Promise<void>): Promise<void> {
-  set({ busy: true, lastError: null });
+  set({ busy: true, lastError: null, lastInfo: null });
   try {
     await fn();
   } catch (e) {

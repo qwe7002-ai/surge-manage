@@ -83,10 +83,10 @@ export class ConnectionManager extends EventEmitter {
     };
   }
 
-  /** Stream `surge log --follow`, emitting parsed LogLine events. */
+  /** Stream `surge watch request`, emitting parsed LogLine events. */
   async startLogs(): Promise<void> {
     if (!this.client || !this.current || this.logChannel) return;
-    const cmd = buildCommandLine(this.current.surge, "logsTail");
+    const cmd = buildCommandLine(this.current.surge, "watchRequest");
     this.logChannel = await execStream(this.client, cmd, (line) => {
       this.emit("log", parseLogLine(line));
     });

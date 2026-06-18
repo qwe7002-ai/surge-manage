@@ -83,7 +83,7 @@ class _LogsPanelState extends State<LogsPanel> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: state.logs.isEmpty
-                ? const Text('Waiting for log output…',
+                ? const Text('Waiting for requests…',
                     style: TextStyle(color: Colors.white38, fontSize: 12))
                 : ListView.builder(
                     controller: _scroll,

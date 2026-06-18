@@ -47,7 +47,7 @@ export default function App() {
                     <ListTree /> Rules
                   </TabsTrigger>
                   <TabsTrigger value="logs" disabled={!connected}>
-                    <ScrollText /> Logs
+                    <ScrollText /> Requests
                   </TabsTrigger>
                   <TabsTrigger value="config" disabled={!connected}>
                     <FileText /> Config
