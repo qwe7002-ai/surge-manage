@@ -91,62 +91,6 @@ Map<String, List<String>> parseSubPolicies(String stdout) {
 List<String> _names(dynamic v) =>
     v is List ? v.map((m) => '$m').toList() : const [];
 
-/// Non-comment lines of a named `[Section]` from a Surge profile config.
-List<String> _configSection(String text, String name) {
-  final out = <String>[];
-  var inSection = false;
-  final lower = name.toLowerCase();
-  for (final raw in text.split(RegExp(r'\r?\n'))) {
-    final line = raw.trim();
-    if (line.isEmpty ||
-        line.startsWith('#') ||
-        line.startsWith('//') ||
-        line.startsWith(';')) {
-      continue;
-    }
-    final m = RegExp(r'^\[(.+)\]$').firstMatch(line);
-    if (m != null) {
-      inSection = m.group(1)!.trim().toLowerCase() == lower;
-      continue;
-    }
-    if (inSection) out.add(line);
-  }
-  return out;
-}
-
-/// Parse the `[Proxy Group]` section into group → member policies. A line looks
-/// like `Name = select, A, B, url=..., interval=...`; the first token is the
-/// group type and `key=value` tokens are options — both are dropped.
-Map<String, List<String>> parseProxyGroups(String configText) {
-  final out = <String, List<String>>{};
-  for (final line in _configSection(configText, 'Proxy Group')) {
-    final eq = line.indexOf('=');
-    if (eq == -1) continue;
-    final name = line.substring(0, eq).trim();
-    if (name.isEmpty) continue;
-    final tokens = line
-        .substring(eq + 1)
-        .split(',')
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
-    out[name] =
-        tokens.skip(1).where((t) => !t.contains('=')).toList();
-  }
-  return out;
-}
-
-/// Parse proxy names from the `[Proxy]` section of a profile config.
-List<String> parseConfigProxies(String configText) {
-  final out = <String>[];
-  for (final line in _configSection(configText, 'Proxy')) {
-    final eq = line.indexOf('=');
-    final name = (eq == -1 ? line : line.substring(0, eq)).trim();
-    if (name.isNotEmpty) out.add(name);
-  }
-  return out;
-}
-
 /// `surge --raw dump policy` → {"proxies":[...],"policy-groups":[...]}
 PolicyDump parsePolicies(String stdout) {
   final json = _tryJson(stdout);

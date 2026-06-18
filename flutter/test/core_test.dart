@@ -94,23 +94,6 @@ void main() {
     expect(rules[2].policy, 'Proxy');
   });
 
-  test('parseProxyGroups reads [Proxy Group] members from config', () {
-    const cfg = '''
-# comment
-[Proxy]
-HK = trojan, hk.example.com, 443, password=x
-US = ss, us.example.com, 8388
-
-[Proxy Group]
-Proxy = select, HK, US, DIRECT
-Auto = url-test, HK, US, url = http://t.com, interval=300
-''';
-    final groups = parseProxyGroups(cfg);
-    expect(groups['Proxy'], ['HK', 'US', 'DIRECT']);
-    expect(groups['Auto'], ['HK', 'US']);
-    expect(parseConfigProxies(cfg), ['HK', 'US']);
-  });
-
   test('config-doc round-trips and edits one section', () {
     const text = '# header\n[General]\nloglevel = notify\n\n'
         '[Proxy]\nHK = trojan, hk.com, 443\n[Rule]\nFINAL,Proxy';

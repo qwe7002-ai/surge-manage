@@ -4,7 +4,6 @@ import {
   DEFAULT_CONFIG_DIR,
   getSectionEntries,
   parseConfigDocument,
-  parseConfigProxies,
   serializeConfigDocument,
   setSectionEntries,
   parseActive,
@@ -12,7 +11,6 @@ import {
   parsePolicies,
   parsePolicyTests,
   parseExternalResources,
-  parseProxyGroups,
   parseRules,
   parseSubPolicies,
   parseTempRules,
@@ -203,26 +201,16 @@ export const useApp = create<AppState>((set, get) => ({
 
   async refreshPolicies() {
     await guarded(set, async () => {
-      const [dump, subs, cfg] = await Promise.all([
+      const [dump, subs] = await Promise.all([
         window.surge.surge.run("dumpPolicy"),
         window.surge.surge.run("dumpPolicySubPolicies").catch(() => null),
-        // Proxy-group members are most reliably read from the profile config.
-        window.surge.surge.run("dumpProfileOriginal").catch(() => null),
       ]);
-      const fromDump = subs ? parseSubPolicies(subs.stdout) : {};
-      const cfgText = cfg?.stdout ?? "";
-      const cfgGroups = cfg ? parseProxyGroups(cfgText) : {};
-      const cfgProxies = cfg ? parseConfigProxies(cfgText) : [];
       const dumped = parsePolicies(dump.stdout);
-      // Prefer dump's live names, but fall back to the config when dump is empty
-      // (some Surge builds return nothing for `dump policy`).
+      // Read the live running instance only — names, members and selection all
+      // come from the environment, never the static profile config.
       set({
-        policies: {
-          proxies: dumped.proxies.length ? dumped.proxies : cfgProxies,
-          groups: dumped.groups.length ? dumped.groups : Object.keys(cfgGroups),
-        },
-        // Config-derived members win; dump fills any gaps.
-        subPolicies: { ...fromDump, ...cfgGroups },
+        policies: { proxies: dumped.proxies, groups: dumped.groups },
+        subPolicies: subs ? parseSubPolicies(subs.stdout) : {},
       });
       // Selection lives in the environment dictionary.
       await get().refreshEnvironment();

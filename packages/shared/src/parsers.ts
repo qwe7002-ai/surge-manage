@@ -183,64 +183,6 @@ function parseRuleLine(line: string): Rule | undefined {
 }
 
 /**
- * Return the non-comment lines of a named section (`[Section]`) from a Surge
- * profile config. Used to read proxies / proxy groups / rules straight from the
- * profile when the `dump` commands are unavailable or incomplete.
- */
-function configSection(text: string, name: string): string[] {
-  const out: string[] = [];
-  let inSection = false;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#") || line.startsWith("//") || line.startsWith(";")) {
-      continue;
-    }
-    const m = /^\[(.+)\]$/.exec(line);
-    if (m) {
-      inSection = m[1]!.trim().toLowerCase() === name.toLowerCase();
-      continue;
-    }
-    if (inSection) out.push(line);
-  }
-  return out;
-}
-
-/**
- * Parse the `[Proxy Group]` section of a profile config into group → member
- * policies. A line looks like `Name = select, A, B, url=..., interval=...`; the
- * first token is the group *type* and `key=value` tokens are options — both are
- * dropped, leaving the candidate policies.
- */
-export function parseProxyGroups(configText: string): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const line of configSection(configText, "Proxy Group")) {
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    const name = line.slice(0, eq).trim();
-    if (!name) continue;
-    const tokens = line
-      .slice(eq + 1)
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    // Drop the leading group type and any `key=value` option tokens.
-    out[name] = tokens.slice(1).filter((t) => !t.includes("="));
-  }
-  return out;
-}
-
-/** Parse proxy names from the `[Proxy]` section of a profile config. */
-export function parseConfigProxies(configText: string): string[] {
-  const out: string[] = [];
-  for (const line of configSection(configText, "Proxy")) {
-    const eq = line.indexOf("=");
-    const name = (eq === -1 ? line : line.slice(0, eq)).trim();
-    if (name) out.push(name);
-  }
-  return out;
-}
-
-/**
  * `surge --raw dump rule` → `{"rules":["DOMAIN-SUFFIX,google.com,Proxy", ...]}`
  * (each entry is a classic rule string). Tolerant of a bare array, an array of
  * `{type,value,policy}` objects, or plain newline-delimited text.

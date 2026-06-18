@@ -6,10 +6,8 @@ import {
   parseActive,
   parseEnvironment,
   parseExternalResources,
-  parseConfigProxies,
   parsePolicies,
   parsePolicyTests,
-  parseProxyGroups,
   parseRules,
   parseSubPolicies,
   parseTempRules,
@@ -87,27 +85,6 @@ test("config-doc round-trips and edits one section without clobbering others", (
   // A section added when absent is appended.
   const withDns = setSectionEntries(doc, "DNS", ["server = 1.1.1.1"]);
   assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
-});
-
-test("parseProxyGroups reads [Proxy Group] members from config", () => {
-  const cfg = `
-# comment
-[Proxy]
-HK = trojan, hk.example.com, 443, password=x
-US = ss, us.example.com, 8388
-
-[Proxy Group]
-Proxy = select, HK, US, DIRECT
-Auto = url-test, HK, US, url = http://t.com, interval=300
-
-[Rule]
-FINAL,Proxy
-`;
-  const groups = parseProxyGroups(cfg);
-  assert.deepEqual(groups["Proxy"], ["HK", "US", "DIRECT"]);
-  // group type dropped, and `url=`/`interval=` option tokens excluded.
-  assert.deepEqual(groups["Auto"], ["HK", "US"]);
-  assert.deepEqual(parseConfigProxies(cfg), ["HK", "US"]);
 });
 
 test("parseSubPolicies maps group → members", () => {

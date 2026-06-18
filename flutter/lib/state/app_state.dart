@@ -155,30 +155,16 @@ class AppState extends ChangeNotifier {
       });
 
   Future<void> refreshPolicies() => _guard(() async {
+        // Read the live running instance only — names, members and selection all
+        // come from the environment, never the static profile config.
         final dump = await _manager!.run(SurgeAction.dumpPolicy);
-        final dumped = parsePolicies(dump.stdout);
-        var fromDump = <String, List<String>>{};
+        policies = parsePolicies(dump.stdout);
         try {
           final subs = await _manager!.run(SurgeAction.dumpPolicySubPolicies);
-          fromDump = parseSubPolicies(subs.stdout);
+          subPolicies = parseSubPolicies(subs.stdout);
         } catch (_) {
-          fromDump = {};
+          subPolicies = {};
         }
-        // Proxy groups/proxies are most reliably read from the profile config.
-        var cfgText = '';
-        try {
-          cfgText = (await _manager!.run(SurgeAction.dumpProfileOriginal)).stdout;
-        } catch (_) {
-          cfgText = '';
-        }
-        final cfgGroups = parseProxyGroups(cfgText);
-        final cfgProxies = parseConfigProxies(cfgText);
-        policies = PolicyDump(
-          proxies: dumped.proxies.isNotEmpty ? dumped.proxies : cfgProxies,
-          groups:
-              dumped.groups.isNotEmpty ? dumped.groups : cfgGroups.keys.toList(),
-        );
-        subPolicies = {...fromDump, ...cfgGroups};
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
