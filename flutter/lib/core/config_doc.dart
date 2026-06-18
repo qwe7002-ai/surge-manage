@@ -82,26 +82,37 @@ List<ConfigSection> setSectionEntries(
   return next;
 }
 
-/// A single rule line, tracking whether it is enabled. In a Surge `[Rule]`
-/// section a `#`-prefixed line is a *disabled* rule, not just a comment.
+/// A single line of a Surge `[Rule]` section. A `#`-prefixed line that still
+/// looks like a rule is a *disabled* rule (toggleable); one that does not is a
+/// plain *comment* (shown read-only, never toggled into a rule).
 class RuleEntry {
-  RuleEntry({required this.text, required this.enabled});
+  RuleEntry({required this.text, required this.enabled, required this.comment});
 
-  /// Rule text with any leading comment marker stripped.
+  /// Rule / comment text with any leading comment marker stripped.
   final String text;
 
-  /// False when the line was commented out (a disabled rule).
+  /// For rules: active vs disabled. Always false for comments.
   final bool enabled;
 
-  RuleEntry copyWith({String? text, bool? enabled}) =>
-      RuleEntry(text: text ?? this.text, enabled: enabled ?? this.enabled);
+  /// True when the line is a plain comment rather than a (disabled) rule.
+  final bool comment;
+
+  RuleEntry copyWith({String? text, bool? enabled, bool? comment}) => RuleEntry(
+        text: text ?? this.text,
+        enabled: enabled ?? this.enabled,
+        comment: comment ?? this.comment,
+      );
 }
 
 final _ruleCommentRe = RegExp(r'^(?:#+|//|;)\s?');
 
-/// Read a `[Rule]`-style section preserving order and disabled (`#`) rules.
-/// Unlike [getSectionEntries], commented lines are returned as disabled
-/// entries instead of being dropped.
+/// A commented line "looks like a rule" when its first comma-separated token is
+/// an all-caps rule type (`DOMAIN-SUFFIX`, `IP-CIDR`, `FINAL`, `AND`, …).
+final _ruleLikeRe = RegExp(r'^[A-Z][A-Z0-9-]*,');
+
+/// Read a `[Rule]`-style section preserving order. Unlike [getSectionEntries],
+/// commented lines are kept: rule-like ones as disabled rules, the rest as
+/// plain comments.
 List<RuleEntry> getRuleEntries(List<ConfigSection> sections, String name) {
   final lower = name.toLowerCase();
   for (final s in sections) {
@@ -113,9 +124,11 @@ List<RuleEntry> getRuleEntries(List<ConfigSection> sections, String name) {
         final m = _ruleCommentRe.firstMatch(t);
         if (m != null) {
           final text = t.substring(m.end).trim();
-          if (text.isNotEmpty) out.add(RuleEntry(text: text, enabled: false));
+          if (text.isEmpty) continue;
+          out.add(RuleEntry(
+              text: text, enabled: false, comment: !_ruleLikeRe.hasMatch(text)));
         } else {
-          out.add(RuleEntry(text: t, enabled: true));
+          out.add(RuleEntry(text: t, enabled: true, comment: false));
         }
       }
       return out;
@@ -124,17 +137,18 @@ List<RuleEntry> getRuleEntries(List<ConfigSection> sections, String name) {
   return const [];
 }
 
-/// Replace a `[Rule]`-style section from [RuleEntry] values, re-adding a `# `
-/// prefix for disabled rules so they survive the round-trip.
+/// Replace a `[Rule]`-style section from [RuleEntry] values. Disabled rules and
+/// comments are written back with a `# ` prefix so they survive the round-trip;
+/// only active rules are emitted bare.
 List<ConfigSection> setRuleEntries(
   List<ConfigSection> sections,
   String name,
   List<RuleEntry> entries,
 ) {
   final lines = entries
-      .map((e) => RuleEntry(text: e.text.trim(), enabled: e.enabled))
+      .map((e) => e.copyWith(text: e.text.trim()))
       .where((e) => e.text.isNotEmpty)
-      .map((e) => e.enabled ? e.text : '# ${e.text}')
+      .map((e) => e.enabled && !e.comment ? e.text : '# ${e.text}')
       .toList();
   return setSectionEntries(sections, name, lines);
 }

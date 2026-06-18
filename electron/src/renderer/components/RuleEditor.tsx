@@ -59,7 +59,7 @@ export function RuleEditor() {
     setDirty(true);
   }
   function add() {
-    setEntries((es) => [...es, { text: "", enabled: true }]);
+    setEntries((es) => [...es, { text: "", enabled: true, comment: false }]);
     setDirty(true);
   }
 
@@ -67,7 +67,7 @@ export function RuleEditor() {
     if (!activeProfile) return;
     setError(null);
     const cleaned = entries
-      .map((e) => ({ text: e.text.trim(), enabled: e.enabled }))
+      .map((e) => ({ text: e.text.trim(), enabled: e.enabled, comment: e.comment }))
       .filter((e) => e.text);
     try {
       await writeProfileRules(activeProfile, cleaned);
@@ -86,7 +86,7 @@ export function RuleEditor() {
     );
   }
 
-  const disabledCount = entries.filter((e) => !e.enabled).length;
+  const disabledCount = entries.filter((e) => !e.enabled && !e.comment).length;
 
   return (
     <div className="flex h-full flex-col space-y-3">
@@ -130,16 +130,29 @@ export function RuleEditor() {
         )}
         {entries.map((e, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <Switch
-              checked={e.enabled}
-              onCheckedChange={(v) => patch(i, { enabled: v })}
-              title={e.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
-            />
+            {e.comment ? (
+              <span
+                className="flex h-5 w-9 shrink-0 items-center justify-center font-mono text-xs text-muted-foreground"
+                title="Comment line"
+              >
+                #
+              </span>
+            ) : (
+              <Switch
+                checked={e.enabled}
+                onCheckedChange={(v) => patch(i, { enabled: v })}
+                title={e.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+              />
+            )}
             <Input
               value={e.text}
               placeholder="DOMAIN-SUFFIX,example.com,Proxy"
               className={`h-8 font-mono text-xs ${
-                e.enabled ? "" : "text-muted-foreground line-through"
+                e.comment
+                  ? "text-muted-foreground"
+                  : e.enabled
+                    ? ""
+                    : "text-muted-foreground line-through"
               }`}
               onChange={(ev) => patch(i, { text: ev.target.value })}
             />

@@ -16,9 +16,10 @@ class RuleEditor extends StatefulWidget {
 }
 
 class _Row {
-  _Row(this.ctrl, this.enabled);
+  _Row(this.ctrl, this.enabled, this.comment);
   final TextEditingController ctrl;
   bool enabled;
+  final bool comment;
 }
 
 class _RuleEditorState extends State<RuleEditor> {
@@ -58,8 +59,8 @@ class _RuleEditorState extends State<RuleEditor> {
       }
       _rows
         ..clear()
-        ..addAll(entries
-            .map((e) => _Row(TextEditingController(text: e.text), e.enabled)));
+        ..addAll(entries.map((e) =>
+            _Row(TextEditingController(text: e.text), e.enabled, e.comment)));
       setState(() {
         _dirty = false;
         _loadedProfile = profile;
@@ -75,7 +76,8 @@ class _RuleEditorState extends State<RuleEditor> {
     final profile = context.read<AppState>().activeProfile;
     if (profile == null) return;
     final entries = _rows
-        .map((r) => RuleEntry(text: r.ctrl.text.trim(), enabled: r.enabled))
+        .map((r) => RuleEntry(
+            text: r.ctrl.text.trim(), enabled: r.enabled, comment: r.comment))
         .where((e) => e.text.isNotEmpty)
         .toList();
     try {
@@ -101,7 +103,8 @@ class _RuleEditorState extends State<RuleEditor> {
       );
     }
 
-    final disabledCount = _rows.where((r) => !r.enabled).length;
+    final disabledCount =
+        _rows.where((r) => !r.enabled && !r.comment).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,7 +163,7 @@ class _RuleEditorState extends State<RuleEditor> {
                     child: FButton(
                       style: FButtonStyle.outline,
                       onPress: () => setState(() {
-                        _rows.add(_Row(TextEditingController(), true));
+                        _rows.add(_Row(TextEditingController(), true, false));
                         _dirty = true;
                       }),
                       label: const Text('Add rule'),
@@ -173,21 +176,34 @@ class _RuleEditorState extends State<RuleEditor> {
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(
                   children: [
-                    Switch(
-                      value: row.enabled,
-                      onChanged: (v) => setState(() {
-                        row.enabled = v;
-                        _dirty = true;
-                      }),
-                    ),
+                    if (row.comment)
+                      const SizedBox(
+                        width: 40,
+                        child: Center(
+                          child: Text('#',
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  color: Colors.white38)),
+                        ),
+                      )
+                    else
+                      Switch(
+                        value: row.enabled,
+                        onChanged: (v) => setState(() {
+                          row.enabled = v;
+                          _dirty = true;
+                        }),
+                      ),
                     Expanded(
                       child: TextField(
                         controller: row.ctrl,
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 12,
-                          color: row.enabled ? null : Colors.white38,
-                          decoration: row.enabled
+                          color: row.enabled && !row.comment
+                              ? null
+                              : Colors.white38,
+                          decoration: row.enabled || row.comment
                               ? null
                               : TextDecoration.lineThrough,
                         ),

@@ -73,23 +73,33 @@ export function setSectionEntries(
 }
 
 /**
- * A single rule line, tracking whether it is enabled. In a Surge `[Rule]`
- * section a `#`-prefixed line is a *disabled* rule, not just a comment.
+ * A single line of a Surge `[Rule]` section. A `#`-prefixed line that still
+ * looks like a rule is a *disabled* rule (toggleable); one that does not is a
+ * plain *comment* (shown read-only, never toggled into a rule).
  */
 export interface RuleEntry {
-  /** Rule text with any leading comment marker stripped. */
+  /** Rule / comment text with any leading comment marker stripped. */
   text: string;
-  /** False when the line was commented out (a disabled rule). */
+  /** For rules: active vs disabled. Always false for comments. */
   enabled: boolean;
+  /** True when the line is a plain comment rather than a (disabled) rule. */
+  comment: boolean;
 }
 
-/** Leading comment marker on a disabled rule (`#`, `//` or `;`). */
+/** Leading comment marker on a commented line (`#`, `//` or `;`). */
 const RULE_COMMENT_RE = /^(?:#+|\/\/|;)\s?/;
 
 /**
- * Read a `[Rule]`-style section preserving order and disabled (`#`) rules.
- * Unlike {@link getSectionEntries}, commented lines are returned as disabled
- * entries instead of being dropped.
+ * A commented line "looks like a rule" when its first comma-separated token is
+ * an all-caps rule type (`DOMAIN-SUFFIX`, `IP-CIDR`, `FINAL`, `AND`, …). Plain
+ * prose comments (`# === Streaming ===`) do not match.
+ */
+const RULE_LIKE_RE = /^[A-Z][A-Z0-9-]*,/;
+
+/**
+ * Read a `[Rule]`-style section preserving order. Unlike {@link
+ * getSectionEntries}, commented lines are kept: rule-like ones as disabled
+ * rules, the rest as plain comments.
  */
 export function getRuleEntries(sections: ConfigSection[], name: string): RuleEntry[] {
   const s = sections.find((x) => x.name?.toLowerCase() === name.toLowerCase());
@@ -101,17 +111,19 @@ export function getRuleEntries(sections: ConfigSection[], name: string): RuleEnt
     const m = RULE_COMMENT_RE.exec(t);
     if (m) {
       const text = t.slice(m[0].length).trim();
-      if (text) out.push({ text, enabled: false });
+      if (!text) continue;
+      out.push({ text, enabled: false, comment: !RULE_LIKE_RE.test(text) });
     } else {
-      out.push({ text: t, enabled: true });
+      out.push({ text: t, enabled: true, comment: false });
     }
   }
   return out;
 }
 
 /**
- * Replace a `[Rule]`-style section from {@link RuleEntry} values, re-adding a
- * `# ` prefix for disabled rules so they survive the round-trip.
+ * Replace a `[Rule]`-style section from {@link RuleEntry} values. Disabled
+ * rules and comments are written back with a `# ` prefix so they survive the
+ * round-trip; only active rules are emitted bare.
  */
 export function setRuleEntries(
   sections: ConfigSection[],
@@ -119,8 +131,8 @@ export function setRuleEntries(
   entries: RuleEntry[],
 ): ConfigSection[] {
   const lines = entries
-    .map((e) => ({ text: e.text.trim(), enabled: e.enabled }))
+    .map((e) => ({ text: e.text.trim(), enabled: e.enabled, comment: e.comment }))
     .filter((e) => e.text)
-    .map((e) => (e.enabled ? e.text : `# ${e.text}`));
+    .map((e) => (e.enabled && !e.comment ? e.text : `# ${e.text}`));
   return setSectionEntries(sections, name, lines);
 }

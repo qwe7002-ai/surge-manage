@@ -89,9 +89,10 @@ test("config-doc round-trips and edits one section without clobbering others", (
   assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
 });
 
-test("getRuleEntries surfaces #-disabled rules; setRuleEntries round-trips", () => {
+test("getRuleEntries classifies rules, disabled rules and plain comments", () => {
   const text = [
     "[Rule]",
+    "# === Streaming ===",
     "DOMAIN-SUFFIX,active.com,Proxy",
     "# DOMAIN-SUFFIX,disabled.com,DIRECT",
     "",
@@ -100,13 +101,17 @@ test("getRuleEntries surfaces #-disabled rules; setRuleEntries round-trips", () 
   const doc = parseConfigDocument(text);
   const rules = getRuleEntries(doc, "Rule");
   assert.deepEqual(rules, [
-    { text: "DOMAIN-SUFFIX,active.com,Proxy", enabled: true },
-    { text: "DOMAIN-SUFFIX,disabled.com,DIRECT", enabled: false },
-    { text: "FINAL,Proxy", enabled: true },
+    { text: "=== Streaming ===", enabled: false, comment: true },
+    { text: "DOMAIN-SUFFIX,active.com,Proxy", enabled: true, comment: false },
+    { text: "DOMAIN-SUFFIX,disabled.com,DIRECT", enabled: false, comment: false },
+    { text: "FINAL,Proxy", enabled: true, comment: false },
   ]);
-  // Toggling enabled state must survive a write → read round-trip.
-  const toggled = rules.map((r) => ({ ...r, enabled: !r.enabled }));
+  // Toggling rules and keeping the comment must survive a write → read trip.
+  const toggled = rules.map((r) =>
+    r.comment ? r : { ...r, enabled: !r.enabled },
+  );
   const out = serializeConfigDocument(setRuleEntries(doc, "Rule", toggled));
+  assert.ok(out.includes("# === Streaming ==="));
   assert.ok(out.includes("# DOMAIN-SUFFIX,active.com,Proxy"));
   assert.ok(out.includes("\nDOMAIN-SUFFIX,disabled.com,DIRECT"));
   assert.deepEqual(getRuleEntries(parseConfigDocument(out), "Rule"), toggled);
