@@ -90,7 +90,7 @@ export default function App() {
                 <TabsContent value="resources" className="mt-0 h-full">
                   <ResourcesPanel />
                 </TabsContent>
-                <TabsContent value="config" className="mt-0">
+                <TabsContent value="config" className="mt-0 h-full">
                   <ConfigPanel />
                 </TabsContent>
               </div>
