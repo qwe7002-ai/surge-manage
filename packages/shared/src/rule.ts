@@ -129,52 +129,40 @@ export function serializeRuleLine(rule: RuleLine): string {
 
 /* ------------------------------ Logical rules ----------------------------- */
 
-/** One matcher inside a logical rule, e.g. `(DOMAIN,a.com)`. */
-export interface LogicalSubRule {
-  type: string;
-  value: string;
-}
+/**
+ * One condition inside a logical rule. Either a leaf matcher (`(DOMAIN,a.com)`)
+ * or a nested logical group (`(OR,((DOMAIN,a),(DOMAIN,b)))`) — logical rules
+ * nest arbitrarily deep, so this is a recursive tree.
+ */
+export type LogicalCondition =
+  | { kind: "match"; type: string; value: string }
+  | { kind: "group"; operator: string; conditions: LogicalCondition[] };
 
 /**
- * A logical rule: an `AND`/`OR`/`NOT` combinator over a list of sub-matchers,
- * targeting a policy. Syntax:
- *   `AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy`
+ * A logical rule: an `AND`/`OR`/`NOT` combinator over a list of conditions
+ * (matchers and/or nested groups), targeting a policy. Syntax:
+ *   `AND,((DOMAIN,a.com),(OR,((DEST-PORT,80),(DEST-PORT,443)))),Proxy`
  */
 export interface LogicalRule {
   operator: string;
-  conditions: LogicalSubRule[];
+  conditions: LogicalCondition[];
   policy: string;
   options: string[];
 }
 
 /**
- * Parse a logical rule into a {@link LogicalRule}. Returns undefined when the
- * line isn't a (single-level) logical rule, so the caller can fall back to raw
- * editing for deeply nested combinations.
+ * Parse a logical rule into a {@link LogicalRule}, recursively handling nested
+ * `AND`/`OR`/`NOT` groups. Returns undefined when the line isn't a logical
+ * rule (or is malformed), so the caller can fall back to raw editing.
  */
 export function parseLogicalRule(text: string): LogicalRule | undefined {
   const t = text.trim();
-  const m = /^(AND|OR|NOT)\s*,\s*\(/i.exec(t);
-  if (!m) return undefined;
-  const operator = m[1]!.toUpperCase();
-
-  // Walk from the group's opening "(" to its matching close, tracking depth.
-  const groupStart = m[0].length - 1;
-  let depth = 0;
-  let groupEnd = -1;
-  for (let i = groupStart; i < t.length; i++) {
-    if (t[i] === "(") depth++;
-    else if (t[i] === ")" && --depth === 0) {
-      groupEnd = i;
-      break;
-    }
-  }
-  if (groupEnd === -1) return undefined;
-
-  const conditions = parseSubRules(t.slice(groupStart + 1, groupEnd));
+  const head = matchLogicalHead(t);
+  if (!head) return undefined;
+  const { operator, listInner, after } = head;
+  const conditions = parseConditionList(listInner);
   if (conditions.length === 0) return undefined;
-  const rest = t
-    .slice(groupEnd + 1)
+  const rest = after
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
@@ -183,9 +171,34 @@ export function parseLogicalRule(text: string): LogicalRule | undefined {
   return { operator, conditions, policy, options: rest.slice(1) };
 }
 
-/** Extract top-level `(type,value)` sub-rules from a logical group's body. */
-function parseSubRules(inner: string): LogicalSubRule[] {
-  const subs: LogicalSubRule[] = [];
+/**
+ * Match a leading `OP,( … )` at the start of `t`. Returns the operator, the
+ * content inside the group's parentheses, and the remainder after the closing
+ * paren — or undefined when `t` doesn't start with a logical group.
+ */
+function matchLogicalHead(
+  t: string,
+): { operator: string; listInner: string; after: string } | undefined {
+  const m = /^(AND|OR|NOT)\s*,\s*\(/i.exec(t);
+  if (!m) return undefined;
+  const open = m[0].length - 1; // index of the group's "("
+  let depth = 0;
+  for (let i = open; i < t.length; i++) {
+    if (t[i] === "(") depth++;
+    else if (t[i] === ")" && --depth === 0) {
+      return {
+        operator: m[1]!.toUpperCase(),
+        listInner: t.slice(open + 1, i),
+        after: t.slice(i + 1),
+      };
+    }
+  }
+  return undefined;
+}
+
+/** Split a group body `(cond),(cond),…` into its top-level conditions. */
+function parseConditionList(inner: string): LogicalCondition[] {
+  const out: LogicalCondition[] = [];
   let depth = 0;
   let start = -1;
   for (let i = 0; i < inner.length; i++) {
@@ -195,28 +208,51 @@ function parseSubRules(inner: string): LogicalSubRule[] {
     } else if (inner[i] === ")") {
       depth--;
       if (depth === 0 && start !== -1) {
-        const body = inner.slice(start, i);
-        const comma = body.indexOf(",");
-        subs.push(
-          comma === -1
-            ? { type: body.trim(), value: "" }
-            : { type: body.slice(0, comma).trim(), value: body.slice(comma + 1).trim() },
-        );
+        const cond = parseCondition(inner.slice(start, i));
+        if (cond) out.push(cond);
         start = -1;
       }
     }
   }
-  return subs.filter((s) => s.type);
+  return out;
+}
+
+/** Parse a single condition body — a nested group or a `type,value` matcher. */
+function parseCondition(body: string): LogicalCondition | undefined {
+  const head = matchLogicalHead(body.trim());
+  if (head) {
+    return {
+      kind: "group",
+      operator: head.operator,
+      conditions: parseConditionList(head.listInner),
+    };
+  }
+  const comma = body.indexOf(",");
+  const type = (comma === -1 ? body : body.slice(0, comma)).trim();
+  if (!type) return undefined;
+  return { kind: "match", type, value: comma === -1 ? "" : body.slice(comma + 1).trim() };
 }
 
 /** Serialize a {@link LogicalRule} back into a rule line. */
 export function serializeLogicalRule(rule: LogicalRule): string {
-  const group = rule.conditions
-    .map((c) => `(${[c.type.trim(), c.value.trim()].filter((p) => p).join(",")})`)
-    .join(",");
-  const parts = [rule.operator.trim(), `(${group})`, rule.policy.trim()];
+  const parts = [
+    rule.operator.trim(),
+    `(${serializeConditionList(rule.conditions)})`,
+    rule.policy.trim(),
+  ];
   for (const opt of rule.options) {
     if (opt.trim()) parts.push(opt.trim());
   }
   return parts.join(",");
+}
+
+function serializeConditionList(conditions: LogicalCondition[]): string {
+  return conditions.map(serializeCondition).join(",");
+}
+
+function serializeCondition(c: LogicalCondition): string {
+  if (c.kind === "group") {
+    return `(${c.operator.trim()},(${serializeConditionList(c.conditions)}))`;
+  }
+  return `(${[c.type.trim(), c.value.trim()].filter((p) => p).join(",")})`;
 }

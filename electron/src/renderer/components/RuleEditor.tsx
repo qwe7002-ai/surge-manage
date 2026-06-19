@@ -5,7 +5,7 @@ import {
   LOGICAL_RULE_TYPES,
   RULE_OPTIONS,
   RULE_TYPES,
-  type LogicalSubRule,
+  type LogicalCondition,
   type RuleEntry,
   parseLogicalRule,
   parseRuleLine,
@@ -362,7 +362,7 @@ function RuleRow({
         <div className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm ${dim}`}>
           <Badge className="shrink-0 text-[10px] font-medium">{logical.operator}</Badge>
           <span className="truncate font-mono text-xs" title={entry.text}>
-            {logical.conditions.map((c) => `${c.type},${c.value}`).join(" · ")}
+            {logical.conditions.map(describeCondition).join(" · ")}
           </span>
           <span className="text-muted-foreground">→</span>
           <Badge variant="secondary" className="shrink-0 text-[10px]">
@@ -472,10 +472,10 @@ function RuleDialog({
   const [policy, setPolicy] = useState(single?.policy ?? "");
   const [options, setOptions] = useState<string[]>(single?.options ?? []);
 
-  // Logical-rule state.
+  // Logical-rule state (conditions are a recursive tree of matchers/groups).
   const [operator, setOperator] = useState(logical?.operator ?? "AND");
-  const [conditions, setConditions] = useState<LogicalSubRule[]>(
-    logical?.conditions ?? [{ type: "DOMAIN-SUFFIX", value: "" }],
+  const [conditions, setConditions] = useState<LogicalCondition[]>(
+    logical?.conditions ?? [{ kind: "match", type: "DOMAIN-SUFFIX", value: "" }],
   );
   const [logicPolicy, setLogicPolicy] = useState(logical?.policy ?? "");
 
@@ -485,13 +485,14 @@ function RuleDialog({
   const hasValue = ruleTypeHasValue(type);
   const optionChoices = Array.from(new Set([...RULE_OPTIONS, ...options]));
 
+  const prunedConditions = pruneConditions(conditions);
   const text =
     tab === "single"
       ? serializeRuleLine({ type, value, policy, options })
       : tab === "logical"
         ? serializeLogicalRule({
             operator,
-            conditions: conditions.filter((c) => c.type && c.value),
+            conditions: prunedConditions,
             policy: logicPolicy,
             options: [],
           })
@@ -501,7 +502,7 @@ function RuleDialog({
     tab === "single"
       ? !!type && !!policy && (!hasValue || !!value)
       : tab === "logical"
-        ? !!logicPolicy && conditions.some((c) => c.type && c.value)
+        ? !!logicPolicy && prunedConditions.length > 0
         : !!rawText.trim();
 
   return (
@@ -602,62 +603,7 @@ function RuleDialog({
 
             <div className="space-y-1.5">
               <Label>Conditions</Label>
-              <div className="space-y-1.5">
-                {conditions.map((c, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <Select
-                      value={c.type}
-                      onValueChange={(v) =>
-                        setConditions((cs) =>
-                          cs.map((x, idx) => (idx === i ? { ...x, type: v } : x)),
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-8 w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        {MATCHER_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={c.value}
-                      placeholder="value"
-                      className="h-8 flex-1 font-mono text-xs"
-                      onChange={(e) =>
-                        setConditions((cs) =>
-                          cs.map((x, idx) => (idx === i ? { ...x, value: e.target.value } : x)),
-                        )
-                      }
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 shrink-0 text-destructive"
-                      title="Remove condition"
-                      disabled={conditions.length === 1}
-                      onClick={() =>
-                        setConditions((cs) => cs.filter((_, idx) => idx !== i))
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setConditions((cs) => [...cs, { type: "DOMAIN-SUFFIX", value: "" }])
-                  }
-                >
-                  <Plus /> Add condition
-                </Button>
-              </div>
+              <ConditionList conditions={conditions} onChange={setConditions} />
             </div>
           </TabsContent>
 
@@ -718,6 +664,155 @@ function PolicySelect({
       </Select>
     </div>
   );
+}
+
+/** Recursive editor for a logical rule's condition tree (matchers + groups). */
+function ConditionList({
+  conditions,
+  onChange,
+}: {
+  conditions: LogicalCondition[];
+  onChange: (next: LogicalCondition[]) => void;
+}) {
+  const canRemove = conditions.length > 1;
+  return (
+    <div className="space-y-1.5">
+      {conditions.map((c, i) => (
+        <ConditionRow
+          key={i}
+          condition={c}
+          canRemove={canRemove}
+          onChange={(next) => onChange(conditions.map((x, idx) => (idx === i ? next : x)))}
+          onRemove={() => onChange(conditions.filter((_, idx) => idx !== i))}
+        />
+      ))}
+      <div className="flex gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            onChange([...conditions, { kind: "match", type: "DOMAIN-SUFFIX", value: "" }])
+          }
+        >
+          <Plus /> Condition
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            onChange([
+              ...conditions,
+              { kind: "group", operator: "OR", conditions: [{ kind: "match", type: "DOMAIN-SUFFIX", value: "" }] },
+            ])
+          }
+        >
+          <Plus /> Group
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ConditionRow({
+  condition,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  condition: LogicalCondition;
+  canRemove: boolean;
+  onChange: (next: LogicalCondition) => void;
+  onRemove: () => void;
+}) {
+  const removeBtn = (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="h-7 w-7 shrink-0 text-destructive"
+      title="Remove"
+      disabled={!canRemove}
+      onClick={onRemove}
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
+  );
+
+  if (condition.kind === "group") {
+    return (
+      <div className="space-y-1.5 rounded-md border border-dashed p-2">
+        <div className="flex items-center gap-1.5">
+          <Select
+            value={condition.operator}
+            onValueChange={(op) => onChange({ ...condition, operator: op })}
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOGICAL_RULE_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">nested group</span>
+          <span className="ml-auto">{removeBtn}</span>
+        </div>
+        <div className="border-l pl-2">
+          <ConditionList
+            conditions={condition.conditions}
+            onChange={(cs) => onChange({ ...condition, conditions: cs })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Select value={condition.type} onValueChange={(v) => onChange({ ...condition, type: v })}>
+        <SelectTrigger className="h-8 w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {MATCHER_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        value={condition.value}
+        placeholder="value"
+        className="h-8 flex-1 font-mono text-xs"
+        onChange={(e) => onChange({ ...condition, value: e.target.value })}
+      />
+      {removeBtn}
+    </div>
+  );
+}
+
+/** Drop empty matchers and empty groups, recursively. */
+function pruneConditions(conditions: LogicalCondition[]): LogicalCondition[] {
+  const out: LogicalCondition[] = [];
+  for (const c of conditions) {
+    if (c.kind === "group") {
+      const inner = pruneConditions(c.conditions);
+      if (inner.length > 0) out.push({ kind: "group", operator: c.operator, conditions: inner });
+    } else if (c.type && c.value) {
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+/** Compact one-line description of a condition tree for the rule list. */
+function describeCondition(c: LogicalCondition): string {
+  return c.kind === "group"
+    ? `${c.operator}(${c.conditions.map(describeCondition).join(", ")})`
+    : `${c.type},${c.value}`;
 }
 
 function valuePlaceholder(type: string): string {

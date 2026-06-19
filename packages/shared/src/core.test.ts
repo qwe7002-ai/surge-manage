@@ -466,8 +466,8 @@ test("parseLogicalRule reads operator, conditions, policy and round-trips", () =
   const r = parseLogicalRule("AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy")!;
   assert.equal(r.operator, "AND");
   assert.deepEqual(r.conditions, [
-    { type: "DOMAIN", value: "a.com" },
-    { type: "DEST-PORT", value: "80" },
+    { kind: "match", type: "DOMAIN", value: "a.com" },
+    { kind: "match", type: "DEST-PORT", value: "80" },
   ]);
   assert.equal(r.policy, "Proxy");
   assert.equal(serializeLogicalRule(r), "AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy");
@@ -480,4 +480,22 @@ test("parseLogicalRule reads operator, conditions, policy and round-trips", () =
   // Non-logical and malformed lines decline.
   assert.equal(parseLogicalRule("DOMAIN,a.com,Proxy"), undefined);
   assert.equal(parseLogicalRule("AND,((DOMAIN,a.com))"), undefined); // no policy
+});
+
+test("parseLogicalRule handles nested logical groups and round-trips", () => {
+  const line = "AND,((OR,((DOMAIN,a.com),(DOMAIN,b.com))),(DEST-PORT,80)),Proxy";
+  const r = parseLogicalRule(line)!;
+  assert.equal(r.operator, "AND");
+  assert.equal(r.conditions.length, 2);
+  const group = r.conditions[0]!;
+  assert.equal(group.kind, "group");
+  if (group.kind === "group") {
+    assert.equal(group.operator, "OR");
+    assert.deepEqual(group.conditions, [
+      { kind: "match", type: "DOMAIN", value: "a.com" },
+      { kind: "match", type: "DOMAIN", value: "b.com" },
+    ]);
+  }
+  assert.deepEqual(r.conditions[1], { kind: "match", type: "DEST-PORT", value: "80" });
+  assert.equal(serializeLogicalRule(r), line);
 });
