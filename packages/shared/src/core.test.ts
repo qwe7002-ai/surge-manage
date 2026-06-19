@@ -363,7 +363,29 @@ test("proxyFieldsFor restricts direct to the bind-interface field", () => {
     ["interface"],
   );
   assert.equal(isRestrictedProtocol("direct"), true);
-  // Other protocols expose the full curated set.
-  assert.ok(proxyFieldsFor("ss").length > 1);
   assert.equal(isRestrictedProtocol("ss"), false);
+});
+
+test("proxyFieldsFor returns protocol-specific fields before common ones", () => {
+  const ss = proxyFieldsFor("ss").map((f) => f.key);
+  // ss-specific keys lead, then the shared/common parameters.
+  assert.deepEqual(ss.slice(0, 5), [
+    "encrypt-method",
+    "password",
+    "obfs",
+    "obfs-host",
+    "obfs-uri",
+  ]);
+  assert.ok(ss.includes("test-url")); // common
+  assert.ok(ss.includes("ip-version")); // common
+  // ws-only protocols don't surface ss-only fields.
+  const vmess = proxyFieldsFor("vmess").map((f) => f.key);
+  assert.ok(vmess.includes("ws") && vmess.includes("vmess-aead"));
+  assert.ok(vmess.includes("encrypt-method")); // vmess uses encrypt-method
+  assert.ok(!vmess.includes("psk")); // psk is snell-only
+  // WireGuard references a section and takes no server/port.
+  assert.deepEqual(proxyFieldsFor("wireguard")[0]!.key, "section-name");
+  assert.equal(protocolUsesServer("wireguard"), false);
+  // Unknown protocols still get the common set.
+  assert.ok(proxyFieldsFor("mystery").some((f) => f.key === "test-url"));
 });

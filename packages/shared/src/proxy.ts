@@ -53,9 +53,10 @@ export const PROXY_PROTOCOLS = [
 ] as const;
 
 /**
- * Protocols whose first two positional args are `server` and `port`. Anything
- * not listed (e.g. `direct`, `reject`) keeps every positional arg in
- * {@link ProxyConfig.extraPositional}.
+ * Protocols whose first two positional args are `server` and `port` (per the
+ * Surge manual). Anything not listed keeps every positional arg in
+ * {@link ProxyConfig.extraPositional}: `direct` takes none, and `wireguard`
+ * references a `[WireGuard]` section via `section-name=` rather than a server.
  */
 const SERVER_PROTOCOLS = new Set([
   "http",
@@ -69,7 +70,6 @@ const SERVER_PROTOCOLS = new Set([
   "tuic",
   "tuic-v5",
   "hysteria2",
-  "wireguard",
   "ssh",
 ]);
 
@@ -96,30 +96,32 @@ export interface ProxyFieldSpec {
 }
 
 /**
- * Curated parameters surfaced as dedicated controls, mirroring Surge's
- * "Edit Proxy" dialog. Any parameter not listed here is still editable via the
- * generic "Additional parameters" rows and is preserved on save.
+ * Registry of every parameter we surface as a dedicated control, keyed by its
+ * Surge parameter name. Which of these apply to a given protocol is decided by
+ * {@link COMMON_FIELD_KEYS} + {@link PROTOCOL_FIELD_KEYS}. Any parameter absent
+ * from this registry is still editable via the generic "Additional Parameters"
+ * rows and is preserved on save.
  */
-export const PROXY_FIELDS: ProxyFieldSpec[] = [
-  {
-    key: "username",
-    label: "Username",
-    kind: "text",
-    placeholder: "Optional",
-  },
-  {
+const FIELD_SPECS: Record<string, ProxyFieldSpec> = {
+  // --- credentials / transport (protocol-specific) ---
+  username: { key: "username", label: "Username", kind: "text", placeholder: "Optional" },
+  password: { key: "password", label: "Password", kind: "password", placeholder: "Optional" },
+  "encrypt-method": {
     key: "encrypt-method",
     label: "Encryption Method",
     kind: "text",
     placeholder: "e.g. 2022-blake3-aes-128-gcm",
   },
-  {
-    key: "password",
-    label: "Password",
-    kind: "password",
-    placeholder: "Optional",
+  psk: { key: "psk", label: "Pre-Shared Key", kind: "password", placeholder: "Snell PSK" },
+  version: { key: "version", label: "Version", kind: "text", placeholder: "e.g. 4" },
+  "section-name": {
+    key: "section-name",
+    label: "WireGuard Section",
+    kind: "text",
+    hint: "Name of the [WireGuard SectionName] block that defines this peer.",
+    placeholder: "e.g. Home",
   },
-  {
+  obfs: {
     key: "obfs",
     label: "Obfuscating",
     kind: "select",
@@ -129,19 +131,40 @@ export const PROXY_FIELDS: ProxyFieldSpec[] = [
       { value: "tls", label: "TLS" },
     ],
   },
-  {
-    key: "obfs-host",
-    label: "Obfuscating Host",
+  "obfs-host": { key: "obfs-host", label: "Obfuscating Host", kind: "text", placeholder: "Optional" },
+  "obfs-uri": { key: "obfs-uri", label: "Obfuscating URI", kind: "text", placeholder: "Optional" },
+  // --- TLS / WebSocket ---
+  tls: { key: "tls", label: "TLS", kind: "toggle" },
+  sni: { key: "sni", label: "SNI", kind: "text", hint: "Use sni=off to disable SNI.", placeholder: "Optional" },
+  "skip-cert-verify": { key: "skip-cert-verify", label: "Skip Certificate Verify", kind: "toggle" },
+  alpn: { key: "alpn", label: "ALPN", kind: "text", placeholder: "e.g. h3" },
+  ws: { key: "ws", label: "WebSocket", kind: "toggle" },
+  "ws-path": { key: "ws-path", label: "WebSocket Path", kind: "text", placeholder: "/" },
+  "ws-headers": { key: "ws-headers", label: "WebSocket Headers", kind: "text", placeholder: "Host:example.com" },
+  "vmess-aead": { key: "vmess-aead", label: "VMess AEAD", kind: "toggle" },
+  // --- common (every protocol) ---
+  "underlying-proxy": {
+    key: "underlying-proxy",
+    label: "Underlying Proxy",
     kind: "text",
-    placeholder: "Optional",
+    hint: "Connection to a remote host will be performed sequentially from one proxy server to another.",
+    placeholder: "Not Use",
   },
-  {
-    key: "sni",
-    label: "SNI",
+  "test-url": {
+    key: "test-url",
+    label: "Override Testing URL",
     kind: "text",
-    placeholder: "Optional",
+    hint: "Override the global testing URL for network diagnostics and activity cards.",
+    placeholder: "http://cloudflare.com",
   },
-  {
+  "test-timeout": {
+    key: "test-timeout",
+    label: "Testing Timeout",
+    kind: "text",
+    hint: "Override the global proxy testing timeout, in seconds.",
+    placeholder: "5",
+  },
+  "block-quic": {
     key: "block-quic",
     label: "Block QUIC",
     kind: "select",
@@ -152,37 +175,38 @@ export const PROXY_FIELDS: ProxyFieldSpec[] = [
       { value: "off", label: "Off" },
     ],
   },
-  {
-    key: "underlying-proxy",
-    label: "Underlying Proxy",
-    kind: "text",
-    hint: "Connection to a remote host will be performed sequentially from one proxy server to another.",
-    placeholder: "Not Use",
+  "udp-relay": {
+    key: "udp-relay",
+    label: "Allow UDP Relay",
+    kind: "toggle",
+    hint: "Forward UDP packets to the proxy server. The server may not support it, so it is off by default.",
   },
-  {
-    key: "test-url",
-    label: "Override Testing URL",
-    kind: "text",
-    hint: "Override the global testing URL for network diagnostics and activity cards.",
-    placeholder: "http://cloudflare.com",
+  tfo: { key: "tfo", label: "TCP Fast Open", kind: "toggle" },
+  hybrid: {
+    key: "hybrid",
+    label: "Hybrid Network",
+    kind: "toggle",
+    hint: "Set up the connection over cellular and Wi-Fi simultaneously and use the faster link.",
   },
-  {
+  interface: {
     key: "interface",
     label: "Bind Network Interface",
     kind: "text",
-    hint: "Force requests to go through the specific network interface. A secondary NIC or a VPN service.",
+    hint: "Force requests through a specific network interface — a secondary NIC or a VPN service.",
     placeholder: "Optional",
   },
-  {
-    key: "tos",
-    label: "IP Packet TOS",
-    kind: "text",
-    placeholder: "Default",
+  "allow-other-interface": {
+    key: "allow-other-interface",
+    label: "Allow Other Interface",
+    kind: "toggle",
+    hint: "Fall back to the default interface when the bound one is unavailable instead of failing.",
   },
-  {
+  tos: { key: "tos", label: "IP Packet TOS", kind: "text", placeholder: "Default" },
+  "ip-version": {
     key: "ip-version",
     label: "IP Version",
     kind: "select",
+    hint: "Only meaningful when the server hostname is a domain.",
     options: [
       { value: "", label: "Default" },
       { value: "dual", label: "Dual Stack" },
@@ -192,44 +216,83 @@ export const PROXY_FIELDS: ProxyFieldSpec[] = [
       { value: "prefer-v6", label: "Prefer IPv6" },
     ],
   },
-  {
-    key: "udp-relay",
-    label: "Allow UDP Relay",
-    kind: "toggle",
-    hint: "Forward UDP packets to the proxy server if enhanced mode is enabled.",
-  },
-  {
-    key: "tfo",
-    label: "TCP Fast Open",
-    kind: "toggle",
-  },
-  {
-    key: "skip-cert-verify",
-    label: "Skip Certificate Verify",
-    kind: "toggle",
-  },
+  "no-error-alert": { key: "no-error-alert", label: "No Error Alert", kind: "toggle" },
+};
+
+/** Common parameters available on every server-based protocol, in display order. */
+const COMMON_FIELD_KEYS = [
+  "underlying-proxy",
+  "test-url",
+  "test-timeout",
+  "block-quic",
+  "udp-relay",
+  "tfo",
+  "hybrid",
+  "interface",
+  "allow-other-interface",
+  "tos",
+  "ip-version",
+  "no-error-alert",
 ];
 
-const FIELD_KEYS = new Set(PROXY_FIELDS.map((f) => f.key));
-
-/** True when `key` has a dedicated control (so it shouldn't appear in the generic rows). */
-export function isKnownProxyField(key: string): boolean {
-  return FIELD_KEYS.has(key.toLowerCase());
-}
+/**
+ * Protocol-specific parameters shown before the common ones, per the Surge
+ * manual's Proxy Policy reference. Protocols not listed fall back to just the
+ * common parameters.
+ */
+const PROTOCOL_FIELD_KEYS: Record<string, string[]> = {
+  http: ["username", "password"],
+  https: ["username", "password", "sni", "skip-cert-verify"],
+  socks5: ["username", "password"],
+  "socks5-tls": ["username", "password", "sni", "skip-cert-verify"],
+  ss: ["encrypt-method", "password", "obfs", "obfs-host", "obfs-uri"],
+  snell: ["psk", "version", "obfs", "obfs-host"],
+  vmess: [
+    "username",
+    "encrypt-method",
+    "tls",
+    "sni",
+    "skip-cert-verify",
+    "ws",
+    "ws-path",
+    "ws-headers",
+    "vmess-aead",
+  ],
+  trojan: ["password", "sni", "skip-cert-verify", "ws", "ws-path", "ws-headers"],
+  tuic: ["password", "alpn", "sni", "skip-cert-verify"],
+  "tuic-v5": ["password", "alpn", "sni", "skip-cert-verify"],
+  hysteria2: ["password", "sni", "skip-cert-verify"],
+  wireguard: ["section-name"],
+  ssh: ["username", "password"],
+};
 
 /**
  * `direct` does not connect to a proxy server: it just forwards traffic out a
  * chosen network interface. Its editor therefore exposes only the bind
  * interface and nothing else (no server/port, encryption, obfuscation, …).
  */
-const DIRECT_FIELD_KEYS = new Set(["interface"]);
+const DIRECT_FIELD_KEYS = ["interface"];
 
-/** The curated fields that apply to a given protocol. */
+/** Every parameter that has a dedicated control, across all protocols. */
+export const PROXY_FIELDS: ProxyFieldSpec[] = Object.values(FIELD_SPECS);
+
+/** True when `key` has a dedicated control for some protocol. */
+export function isKnownProxyField(key: string): boolean {
+  return key.toLowerCase() in FIELD_SPECS;
+}
+
+/**
+ * The curated fields that apply to a given protocol: protocol-specific
+ * parameters first, then the common ones. `direct` is restricted to the bind
+ * interface, and unknown protocols get only the common set.
+ */
 export function proxyFieldsFor(type: string): ProxyFieldSpec[] {
-  if (type.toLowerCase() === "direct") {
-    return PROXY_FIELDS.filter((f) => DIRECT_FIELD_KEYS.has(f.key));
-  }
-  return PROXY_FIELDS;
+  const t = type.toLowerCase();
+  const keys =
+    t === "direct"
+      ? DIRECT_FIELD_KEYS
+      : [...(PROTOCOL_FIELD_KEYS[t] ?? []), ...COMMON_FIELD_KEYS];
+  return keys.map((k) => FIELD_SPECS[k]).filter((f): f is ProxyFieldSpec => !!f);
 }
 
 /**
