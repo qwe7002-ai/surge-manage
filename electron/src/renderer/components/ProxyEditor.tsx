@@ -1,13 +1,13 @@
 import { useState } from "react";
 import {
-  PROXY_FIELDS,
   PROXY_PROTOCOLS,
   type ProxyConfig,
   type ProxyFieldSpec,
   getProxyParam,
-  isKnownProxyField,
+  isRestrictedProtocol,
   parseProxyLine,
   protocolUsesServer,
+  proxyFieldsFor,
   serializeProxyLine,
   setProxyParam,
 } from "@surge-manage/shared";
@@ -74,11 +74,14 @@ export function ProxyEditor({
     onChange(serializeProxyLine(parsed));
   }
 
+  // Fields that apply to the current protocol (e.g. `direct` only binds an interface).
+  const fields = config ? proxyFieldsFor(config.type) : [];
+  const fieldKeys = new Set(fields.map((f) => f.key.toLowerCase()));
   // Parameters with no dedicated control, surfaced as generic editable rows.
   const extraParams = config
     ? config.params
         .map((p, i) => ({ ...p, i }))
-        .filter((p) => !isKnownProxyField(p.key))
+        .filter((p) => !fieldKeys.has(p.key.toLowerCase()))
     : [];
 
   return (
@@ -108,6 +111,7 @@ export function ProxyEditor({
       ) : config ? (
         <FormBody
           config={config}
+          fields={fields}
           extraParams={extraParams}
           onName={(name) => update({ ...config, name })}
           onType={(type) => update({ ...config, type })}
@@ -140,6 +144,7 @@ export function ProxyEditor({
 
 function FormBody({
   config,
+  fields,
   extraParams,
   onName,
   onType,
@@ -152,6 +157,7 @@ function FormBody({
   onParamAdd,
 }: {
   config: ProxyConfig;
+  fields: ProxyFieldSpec[];
   extraParams: { key: string; value: string; i: number }[];
   onName: (v: string) => void;
   onType: (v: string) => void;
@@ -168,6 +174,10 @@ function FormBody({
       ? PROXY_PROTOCOLS
       : [{ value: config.type, label: config.type }, ...PROXY_PROTOCOLS];
   const showServer = protocolUsesServer(config.type);
+  // Restricted protocols (e.g. direct) take no free-form params; only keep the
+  // section if the line already carries extras, so nothing is silently dropped.
+  const showAdditional =
+    !isRestrictedProtocol(config.type) || extraParams.length > 0;
 
   return (
     <div className="space-y-5">
@@ -214,7 +224,7 @@ function FormBody({
       )}
 
       <div className="grid gap-5 md:grid-cols-2">
-        {PROXY_FIELDS.map((spec) => (
+        {fields.map((spec) => (
           <ParamField
             key={spec.key}
             spec={spec}
@@ -224,44 +234,46 @@ function FormBody({
         ))}
       </div>
 
-      <Section title="Additional Parameters">
-        <div className="space-y-1.5">
-          {extraParams.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              No additional parameters. Anything Surge supports can be added here.
-            </p>
-          )}
-          {extraParams.map((p) => (
-            <div key={p.i} className="flex items-center gap-1.5">
-              <Input
-                value={p.key}
-                placeholder="key"
-                className="h-8 w-44 font-mono text-xs"
-                onChange={(e) => onParamKey(p.i, e.target.value)}
-              />
-              <span className="text-muted-foreground">=</span>
-              <Input
-                value={p.value}
-                placeholder="value"
-                className="h-8 flex-1 font-mono text-xs"
-                onChange={(e) => onParamValue(p.i, e.target.value)}
-              />
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 text-destructive"
-                title="Remove parameter"
-                onClick={() => onParamRemove(p.i)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-          <Button size="sm" variant="outline" className="mt-1" onClick={onParamAdd}>
-            <Plus /> Add parameter
-          </Button>
-        </div>
-      </Section>
+      {showAdditional && (
+        <Section title="Additional Parameters">
+          <div className="space-y-1.5">
+            {extraParams.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No additional parameters. Anything Surge supports can be added here.
+              </p>
+            )}
+            {extraParams.map((p) => (
+              <div key={p.i} className="flex items-center gap-1.5">
+                <Input
+                  value={p.key}
+                  placeholder="key"
+                  className="h-8 w-44 font-mono text-xs"
+                  onChange={(e) => onParamKey(p.i, e.target.value)}
+                />
+                <span className="text-muted-foreground">=</span>
+                <Input
+                  value={p.value}
+                  placeholder="value"
+                  className="h-8 flex-1 font-mono text-xs"
+                  onChange={(e) => onParamValue(p.i, e.target.value)}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 text-destructive"
+                  title="Remove parameter"
+                  onClick={() => onParamRemove(p.i)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button size="sm" variant="outline" className="mt-1" onClick={onParamAdd}>
+              <Plus /> Add parameter
+            </Button>
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

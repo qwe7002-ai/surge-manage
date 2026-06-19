@@ -218,6 +218,29 @@ export function isKnownProxyField(key: string): boolean {
 }
 
 /**
+ * `direct` does not connect to a proxy server: it just forwards traffic out a
+ * chosen network interface. Its editor therefore exposes only the bind
+ * interface and nothing else (no server/port, encryption, obfuscation, …).
+ */
+const DIRECT_FIELD_KEYS = new Set(["interface"]);
+
+/** The curated fields that apply to a given protocol. */
+export function proxyFieldsFor(type: string): ProxyFieldSpec[] {
+  if (type.toLowerCase() === "direct") {
+    return PROXY_FIELDS.filter((f) => DIRECT_FIELD_KEYS.has(f.key));
+  }
+  return PROXY_FIELDS;
+}
+
+/**
+ * True when a protocol only supports the curated subset returned by
+ * {@link proxyFieldsFor} (so free-form "additional parameters" make no sense).
+ */
+export function isRestrictedProtocol(type: string): boolean {
+  return type.toLowerCase() === "direct";
+}
+
+/**
  * Parse one `[Proxy]` entry line into a {@link ProxyConfig}. Returns undefined
  * when the line has no `=` name separator or an empty name/type.
  *

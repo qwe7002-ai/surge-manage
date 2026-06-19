@@ -24,8 +24,10 @@ import {
 } from "../dist/config-doc.js";
 import {
   getProxyParam,
+  isRestrictedProtocol,
   parseProxyLine,
   protocolUsesServer,
+  proxyFieldsFor,
   serializeProxyLine,
   setProxyParam,
 } from "../dist/proxy.js";
@@ -352,4 +354,16 @@ test("setProxyParam updates, appends, and removes by case-insensitive key", () =
 test("parseProxyLine returns undefined for malformed entries", () => {
   assert.equal(parseProxyLine("no-equals-here"), undefined);
   assert.equal(parseProxyLine("= ss, h, 1"), undefined);
+});
+
+test("proxyFieldsFor restricts direct to the bind-interface field", () => {
+  const direct = proxyFieldsFor("direct");
+  assert.deepEqual(
+    direct.map((f) => f.key),
+    ["interface"],
+  );
+  assert.equal(isRestrictedProtocol("direct"), true);
+  // Other protocols expose the full curated set.
+  assert.ok(proxyFieldsFor("ss").length > 1);
+  assert.equal(isRestrictedProtocol("ss"), false);
 });
