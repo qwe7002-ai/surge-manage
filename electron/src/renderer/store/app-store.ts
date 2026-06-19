@@ -48,6 +48,8 @@ interface AppState {
   traffic: Traffic | null;
   connections: ActiveConnection[];
   profiles: string[];
+  /** Network interface names on the connected host (for interface binding). */
+  interfaces: string[];
   /** Profile whose config file structured editors read/write. */
   activeProfile: string | null;
   logs: LogLine[];
@@ -84,6 +86,8 @@ interface AppState {
   setToggle: (key: string, on: boolean) => Promise<void>;
   killConnection: (id: string) => Promise<void>;
   refreshProfiles: () => Promise<void>;
+  /** Read the connected host's network interface names. */
+  refreshInterfaces: () => Promise<void>;
   switchProfile: (name: string) => Promise<void>;
   setActiveProfile: (name: string) => void;
   /** Read a config section's entry lines from a profile file. */
@@ -122,6 +126,7 @@ export const useApp = create<AppState>((set, get) => ({
   traffic: null,
   connections: [],
   profiles: [],
+  interfaces: [],
   activeProfile: null,
   logs: [],
   logStreaming: false,
@@ -152,6 +157,7 @@ export const useApp = create<AppState>((set, get) => ({
           traffic: null,
           connections: [],
           profiles: [],
+          interfaces: [],
           logStreaming: false,
         });
       }
@@ -354,6 +360,14 @@ export const useApp = create<AppState>((set, get) => ({
       }));
     } catch {
       set({ profiles: [], activeProfile: null });
+    }
+  },
+
+  async refreshInterfaces() {
+    try {
+      set({ interfaces: await window.surge.system.listInterfaces() });
+    } catch {
+      set({ interfaces: [] });
     }
   },
 

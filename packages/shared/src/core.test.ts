@@ -24,6 +24,7 @@ import {
 } from "../dist/config-doc.js";
 import {
   getProxyParam,
+  groupedProxyFields,
   isRestrictedProtocol,
   parseProxyLine,
   protocolUsesServer,
@@ -31,6 +32,7 @@ import {
   serializeProxyLine,
   setProxyParam,
 } from "../dist/proxy.js";
+import { parseInterfaces } from "../dist/parsers.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -399,4 +401,23 @@ test("block-quic defaults to Auto (absence) and underlying-proxy is a policy sel
   assert.equal(blockQuic.options![0]!.label, "Auto");
   const underlying = fields.find((f) => f.key === "underlying-proxy")!;
   assert.equal(underlying.kind, "policy");
+});
+
+test("parseInterfaces handles macOS ifconfig -l and Linux /sys/class/net", () => {
+  assert.deepEqual(parseInterfaces("lo0 en0 en1 utun0"), ["en0", "en1", "lo0", "utun0"]);
+  assert.deepEqual(parseInterfaces("eth0\nlo\nwg0\n"), ["eth0", "lo", "wg0"]);
+  assert.deepEqual(parseInterfaces("  "), []);
+});
+
+test("groupedProxyFields buckets fields into ordered sections", () => {
+  const groups = groupedProxyFields("ss");
+  const ids = groups.map((g) => g.id);
+  // Order follows PROXY_FIELD_GROUPS; ss has auth, obfs, chain, testing, egress, options.
+  assert.deepEqual(ids, ["auth", "obfs", "chain", "testing", "egress", "options"]);
+  const egress = groups.find((g) => g.id === "egress")!;
+  assert.ok(egress.fields.some((f) => f.key === "interface"));
+  // direct collapses to a single Egress group with just the interface field.
+  const direct = groupedProxyFields("direct");
+  assert.deepEqual(direct.map((g) => g.id), ["egress"]);
+  assert.deepEqual(direct[0].fields.map((f) => f.key), ["interface"]);
 });

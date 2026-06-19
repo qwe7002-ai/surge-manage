@@ -79,10 +79,17 @@ export function protocolUsesServer(type: string): boolean {
 }
 
 /**
- * The widget a known parameter should be edited with. `policy` is a select
- * populated at render time with the available proxies and policy groups.
+ * The widget a known parameter should be edited with. `policy` and `interface`
+ * are selects populated at render time — with the available proxies/policy
+ * groups and the host's network interfaces respectively.
  */
-export type ProxyFieldKind = "text" | "password" | "toggle" | "select" | "policy";
+export type ProxyFieldKind =
+  | "text"
+  | "password"
+  | "toggle"
+  | "select"
+  | "policy"
+  | "interface";
 
 /** UI metadata for a known proxy parameter. */
 export interface ProxyFieldSpec {
@@ -202,9 +209,9 @@ const FIELD_SPECS: Record<string, ProxyFieldSpec> = {
   interface: {
     key: "interface",
     label: "Bind Network Interface",
-    kind: "text",
+    kind: "interface",
     hint: "Force requests through a specific network interface — a secondary NIC or a VPN service.",
-    placeholder: "Optional",
+    placeholder: "Default",
   },
   "allow-other-interface": {
     key: "allow-other-interface",
@@ -312,6 +319,75 @@ export function proxyFieldsFor(type: string): ProxyFieldSpec[] {
  */
 export function isRestrictedProtocol(type: string): boolean {
   return type.toLowerCase() === "direct";
+}
+
+/**
+ * Curated fields organised into labelled sections, in display order. The editor
+ * renders one titled group per section, which is far more readable than one
+ * flat list. Each group lists the parameter keys it owns (also in order).
+ */
+export const PROXY_FIELD_GROUPS: { id: string; title: string; keys: string[] }[] = [
+  {
+    id: "auth",
+    title: "Authentication & Encryption",
+    keys: [
+      "username",
+      "password",
+      "encrypt-method",
+      "psk",
+      "version",
+      "section-name",
+      "tls",
+      "sni",
+      "skip-cert-verify",
+      "alpn",
+    ],
+  },
+  { id: "obfs", title: "Obfuscation", keys: ["obfs", "obfs-host", "obfs-uri"] },
+  {
+    id: "transport",
+    title: "WebSocket Transport",
+    keys: ["ws", "ws-path", "ws-headers", "vmess-aead"],
+  },
+  { id: "chain", title: "Proxy Chain", keys: ["underlying-proxy"] },
+  { id: "testing", title: "Testing", keys: ["test-url", "test-timeout"] },
+  {
+    id: "egress",
+    title: "Egress Control",
+    keys: ["interface", "allow-other-interface", "tos", "ip-version"],
+  },
+  {
+    id: "options",
+    title: "Options",
+    keys: ["block-quic", "udp-relay", "tfo", "hybrid", "no-error-alert"],
+  },
+];
+
+/** A section of the proxy editor: a title plus the fields it contains. */
+export interface ProxyFieldGroup {
+  id: string;
+  title: string;
+  fields: ProxyFieldSpec[];
+}
+
+/**
+ * {@link proxyFieldsFor} arranged into {@link PROXY_FIELD_GROUPS}. Only groups
+ * with at least one applicable field for `type` are returned, preserving both
+ * group order and within-group field order.
+ */
+export function groupedProxyFields(type: string): ProxyFieldGroup[] {
+  const applicable = new Set(proxyFieldsFor(type).map((f) => f.key));
+  const groups: ProxyFieldGroup[] = [];
+  for (const group of PROXY_FIELD_GROUPS) {
+    const fields = group.keys
+      .filter((k) => applicable.has(k))
+      .map((k) => FIELD_SPECS[k])
+      .filter((f): f is ProxyFieldSpec => !!f);
+    if (fields.length > 0) {
+      groups.push({ id: group.id, title: group.title, fields });
+    }
+  }
+  return groups;
 }
 
 /**

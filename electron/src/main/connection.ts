@@ -1,13 +1,14 @@
 import { EventEmitter } from "node:events";
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { copyFile, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import type { Client, ClientChannel } from "ssh2";
 import {
   buildCommandArgv,
   buildCommandLine,
   buildListProfilesCommand,
   DEFAULT_CONFIG_DIR,
+  parseInterfaces,
   parseLogLine,
   parseProfiles,
   shellQuote,
@@ -196,6 +197,26 @@ export class ConnectionManager extends EventEmitter {
     }
     const { stdout } = await exec(this.client!, buildListProfilesCommand(dir));
     return parseProfiles(stdout);
+  }
+
+  /**
+   * List network interface names on the host, for interface binding. Uses the
+   * OS API locally; over SSH, runs macOS `ifconfig -l` and falls back to Linux
+   * `ls /sys/class/net`. Returns [] when neither is available rather than
+   * throwing — interface binding is optional.
+   */
+  async listInterfaces(): Promise<string[]> {
+    if (!this.current || (this.current.auth !== "local" && !this.client)) {
+      throw new Error("Not connected");
+    }
+    if (this.current.auth === "local") {
+      return parseInterfaces(Object.keys(networkInterfaces()).join("\n"));
+    }
+    const { stdout } = await exec(
+      this.client!,
+      "ifconfig -l 2>/dev/null || ls /sys/class/net 2>/dev/null",
+    );
+    return parseInterfaces(stdout);
   }
 
   private async profilePath(profile: string): Promise<string> {

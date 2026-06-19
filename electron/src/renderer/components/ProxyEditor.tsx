@@ -4,6 +4,7 @@ import {
   type ProxyConfig,
   type ProxyFieldSpec,
   getProxyParam,
+  groupedProxyFields,
   isRestrictedProtocol,
   parseProxyLine,
   protocolUsesServer,
@@ -36,11 +37,14 @@ const EMPTY = "__empty__";
 export function ProxyEditor({
   initialLine,
   policies = [],
+  interfaces = [],
   onChange,
 }: {
   initialLine: string;
   /** All proxies and policy groups, offered as underlying-proxy choices. */
   policies?: string[];
+  /** The host's network interface names, offered for interface binding. */
+  interfaces?: string[];
   onChange: (line: string) => void;
 }) {
   const parsedInitial = parseProxyLine(initialLine);
@@ -114,8 +118,8 @@ export function ProxyEditor({
       ) : config ? (
         <FormBody
           config={config}
-          fields={fields}
           policies={policies}
+          interfaces={interfaces}
           extraParams={extraParams}
           onName={(name) => update({ ...config, name })}
           onType={(type) => update({ ...config, type })}
@@ -148,8 +152,8 @@ export function ProxyEditor({
 
 function FormBody({
   config,
-  fields,
   policies,
+  interfaces,
   extraParams,
   onName,
   onType,
@@ -162,8 +166,8 @@ function FormBody({
   onParamAdd,
 }: {
   config: ProxyConfig;
-  fields: ProxyFieldSpec[];
   policies: string[];
+  interfaces: string[];
   extraParams: { key: string; value: string; i: number }[];
   onName: (v: string) => void;
   onType: (v: string) => void;
@@ -180,20 +184,21 @@ function FormBody({
       ? PROXY_PROTOCOLS
       : [{ value: config.type, label: config.type }, ...PROXY_PROTOCOLS];
   const showServer = protocolUsesServer(config.type);
+  const groups = groupedProxyFields(config.type);
   // Restricted protocols (e.g. direct) take no free-form params; only keep the
   // section if the line already carries extras, so nothing is silently dropped.
   const showAdditional =
     !isRestrictedProtocol(config.type) || extraParams.length > 0;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+    <div className="space-y-6">
+      <div className="grid grid-cols-[1fr_12rem] items-end gap-3">
         <Field label="Name">
           <Input value={config.name} onChange={(e) => onName(e.target.value)} />
         </Field>
         <Field label="Protocol">
           <Select value={config.type} onValueChange={onType}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger>
               <SelectValue placeholder="protocol…" />
             </SelectTrigger>
             <SelectContent>
@@ -229,17 +234,22 @@ function FormBody({
         </Section>
       )}
 
-      <div className="grid gap-5 md:grid-cols-2">
-        {fields.map((spec) => (
-          <ParamField
-            key={spec.key}
-            spec={spec}
-            value={getProxyParam(config, spec.key) ?? ""}
-            policies={policies}
-            onChange={(v) => onParam(spec.key, v)}
-          />
-        ))}
-      </div>
+      {groups.map((group) => (
+        <Section key={group.id} title={group.title}>
+          <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+            {group.fields.map((spec) => (
+              <ParamField
+                key={spec.key}
+                spec={spec}
+                value={getProxyParam(config, spec.key) ?? ""}
+                policies={policies}
+                interfaces={interfaces}
+                onChange={(v) => onParam(spec.key, v)}
+              />
+            ))}
+          </div>
+        </Section>
+      ))}
 
       {showAdditional && (
         <Section title="Additional Parameters">
@@ -289,16 +299,22 @@ function ParamField({
   spec,
   value,
   policies,
+  interfaces,
   onChange,
 }: {
   spec: ProxyFieldSpec;
   value: string;
   policies: string[];
+  interfaces: string[];
   onChange: (v: string) => void;
 }) {
-  if (spec.kind === "policy") {
-    // "Not Use" (empty) plus every proxy/group; keep an unknown current value.
-    const options = value && !policies.includes(value) ? [value, ...policies] : policies;
+  if (spec.kind === "policy" || spec.kind === "interface") {
+    // A "none" entry (empty) plus the live suggestions; keep an unknown current
+    // value so a hand-written interface/policy isn't lost.
+    const suggestions = spec.kind === "policy" ? policies : interfaces;
+    const noneLabel = spec.placeholder ?? (spec.kind === "policy" ? "Not Use" : "Default");
+    const options =
+      value && !suggestions.includes(value) ? [value, ...suggestions] : suggestions;
     return (
       <Field label={spec.label} hint={spec.hint}>
         <Select
@@ -306,10 +322,10 @@ function ParamField({
           onValueChange={(v) => onChange(v === EMPTY ? "" : v)}
         >
           <SelectTrigger>
-            <SelectValue placeholder={spec.placeholder ?? "Not Use"} />
+            <SelectValue placeholder={noneLabel} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={EMPTY}>{spec.placeholder ?? "Not Use"}</SelectItem>
+            <SelectItem value={EMPTY}>{noneLabel}</SelectItem>
             {options.map((p) => (
               <SelectItem key={p} value={p}>
                 {p}

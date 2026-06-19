@@ -46,6 +46,8 @@ export function PoliciesPanel() {
   const busy = useApp((s) => s.busy);
   const refreshPolicies = useApp((s) => s.refreshPolicies);
   const refreshProfiles = useApp((s) => s.refreshProfiles);
+  const refreshInterfaces = useApp((s) => s.refreshInterfaces);
+  const interfaces = useApp((s) => s.interfaces);
   const testPolicy = useApp((s) => s.testPolicy);
   const testAllPolicies = useApp((s) => s.testAllPolicies);
   const selectPolicy = useApp((s) => s.selectPolicy);
@@ -73,8 +75,9 @@ export function PoliciesPanel() {
     if (connected) {
       void refreshPolicies();
       void refreshProfiles();
+      void refreshInterfaces();
     }
-  }, [connected, refreshPolicies, refreshProfiles]);
+  }, [connected, refreshPolicies, refreshProfiles, refreshInterfaces]);
 
   useEffect(() => {
     if (!proxyMenu) return;
@@ -306,6 +309,7 @@ export function PoliciesPanel() {
               key={`${proxyEditor.profile}:${proxyEditor.name}`}
               initialLine={proxyEditor.line}
               policies={allPolicies.filter((p) => p !== proxyEditor.name)}
+              interfaces={interfaces}
               onChange={(line) =>
                 setProxyEditor((current) => (current ? { ...current, line } : current))
               }
