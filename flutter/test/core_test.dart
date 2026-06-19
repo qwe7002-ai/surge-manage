@@ -12,10 +12,32 @@ void main() {
         'surge-cli --raw environment');
     expect(buildCommandLine(profile, SurgeAction.dumpPolicy),
         'surge-cli --raw dump policy');
+    expect(buildCommandLine(profile, SurgeAction.dumpEvent),
+        'surge-cli --raw dump event');
+    expect(buildCommandLine(profile, SurgeAction.dumpVirtualIpDb),
+        'surge-cli --raw dump virtual-ip-db');
     expect(buildCommandLine(profile, SurgeAction.reload), 'surge-cli reload');
+    expect(buildCommandLine(profile, SurgeAction.unattendedUpgrade),
+        'surge-cli unattended-upgrade');
     expect(
       buildCommandLine(profile, SurgeAction.switchProfile, ['Home Profile']),
       "surge-cli switch-profile 'Home Profile'",
+    );
+    expect(
+      buildCommandLine(
+        profile,
+        SurgeAction.setEnvironment,
+        ['ProxyGroupSelection.Proxy', 'HK'],
+      ),
+      'surge-cli set ProxyGroupSelection.Proxy HK',
+    );
+    expect(
+      buildCommandLine(profile, SurgeAction.scriptEvaluate, ['/tmp/test.js']),
+      'surge-cli script evaluate /tmp/test.js',
+    );
+    expect(
+      buildCommandLine(profile, SurgeAction.checkProfile, ['/tmp/Profile.conf']),
+      'surge-cli --check /tmp/Profile.conf',
     );
   });
 
@@ -131,9 +153,13 @@ void main() {
   });
 
   test('buildCommandLine adds --raw to test commands', () {
+    expect(buildCommandLine(profile, SurgeAction.testNetwork),
+        'surge-cli --raw test-network');
     expect(buildCommandLine(profile, SurgeAction.testAllPolicies),
         'surge-cli --raw test-all-policies');
     expect(buildCommandLine(profile, SurgeAction.testPolicy, ['HK']),
         'surge-cli --raw test-policy HK');
+    expect(buildCommandLine(profile, SurgeAction.testGroup, ['FINAL']),
+        'surge-cli --raw test-group FINAL');
   });
 }

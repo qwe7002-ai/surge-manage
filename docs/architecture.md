@@ -54,21 +54,26 @@ A single declarative catalog maps each action 1:1 onto a real **Surge CLI** comm
 | `dumpActive`            | `surge-cli --raw dump active` | JSON → Connection[] |
 | `dumpRequest`           | `surge-cli --raw dump request`| JSON                |
 | `dumpDns`               | `surge-cli --raw dump dns`    | JSON                |
+| `dumpEvent`             | `surge-cli --raw dump event`  | JSON                |
+| `dumpVirtualIpDb`       | `surge-cli --raw dump virtual-ip-db` | JSON        |
 | `dumpProfileEffective`  | `surge-cli dump profile effective` | text           |
 | `dumpProfileOriginal`   | `surge-cli dump profile original`  | text           |
 | `reload`                | `surge-cli reload`            | exit-code           |
 | `stop`                  | `surge-cli stop`              | exit-code           |
 | `switchProfile`         | `surge-cli switch-profile <n>`| exit-code           |
+| `unattendedUpgrade`     | `surge-cli unattended-upgrade`| exit-code           |
 | `watchRequest`          | `surge-cli watch request`     | stream lines        |
-| `testNetwork`           | `surge-cli test-network`      | text                |
-| `testPolicy`            | `surge-cli test-policy <n>`   | JSON → PolicyTest   |
-| `testAllPolicies`       | `surge-cli test-all-policies` | JSON → PolicyTest[] |
-| `testGroup`             | `surge-cli test-group <n>`    | JSON → PolicyTest[] |
+| `testNetwork`           | `surge-cli --raw test-network`| JSON                |
+| `testPolicy`            | `surge-cli --raw test-policy <n>` | JSON → PolicyTest |
+| `testAllPolicies`       | `surge-cli --raw test-all-policies` | JSON → PolicyTest[] |
+| `testGroup`             | `surge-cli --raw test-group <n>` | JSON              |
 | `flushDns`              | `surge-cli flush dns`         | exit-code           |
 | `diagnostics`           | `surge-cli diagnostics`       | text                |
 | `kill`                  | `surge-cli kill <id>`         | exit-code           |
 | `setLogLevel`           | `surge-cli set-log-level <l>` | exit-code           |
 | `setEnvironment`        | `surge-cli set <key> <value>` | exit-code           |
+| `scriptEvaluate`        | `surge-cli script evaluate <path>` | text/exit-code |
+| `checkProfile`          | `surge-cli --check <path>`    | text/exit-code      |
 
 Real `--raw` shapes (from the Surge CLI):
 
@@ -79,13 +84,17 @@ Real `--raw` shapes (from the Surge CLI):
 {"rules":["DOMAIN-SUFFIX,google.com,Proxy","GEOIP,CN,DIRECT","FINAL,Proxy"]}
 // dump active  (active requests live under a `requests` envelope; ids are numbers)
 {"requests":[{"id":42,"remoteAddress":"a:443","policyName":"HK","inBytes":1000,"outBytes":500}]}
+// test-network
+{"time":0.029876}
+// test-group
+{"available":["Proxy A","Proxy B"]}
 // test-all-policies  (NOTE: requires the `--raw` flag to emit JSON)
 {"UK":{"tcp":66,"receive":415,"available":69,"round-one-total":1055},
  "CA":{"error":"Socket closed by remote peer","available":0}}
 ```
 
 > The binary name/path is **configurable per connection** (`SurgeProfile.bin`). The default
-> is `surge-cli`; on macOS the full path is usually
+> is the macOS bundle path
 > `/Applications/Surge.app/Contents/Applications/surge-cli`. Surge also has its own
 > `--remote password@host:port` flag, which can be added via `SurgeProfile` argv overrides if
 > you prefer Surge's native remote channel over the SSH transport.
@@ -138,7 +147,7 @@ window.surge.logs.onLine(cb)                    // parsed LogLine events
 ### Feature coverage
 
 Beyond inspection, the UI drives Surge's mutating commands: outbound mode
-(`set ProxyMode`), policy-group selection (`set ProxyGroupSelection.<g>=<p>`), feature
+(`set ProxyMode <mode>`), policy-group selection (`set ProxyGroupSelection.<g> <p>`), feature
 toggles (`set MitMEnabled|RewriteEnabled|ScriptingEnabled|Replica`), live connection
 killing (`kill <id>` from the Connections tab), profile switching (`switch-profile`, with
 the candidate list read from `configDir`), DNS flush, diagnostics, and log-level changes.

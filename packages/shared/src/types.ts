@@ -68,6 +68,7 @@ export type SurgeAction =
   | "reload" // reload the main profile
   | "stop" // shut down Surge
   | "switchProfile" // switch-profile <name>
+  | "unattendedUpgrade" // unattended-upgrade
   // inspection (dump *)
   | "environment" // environment
   | "dumpPolicy" // dump policy
@@ -76,6 +77,8 @@ export type SurgeAction =
   | "dumpActive" // dump active
   | "dumpRequest" // dump request
   | "dumpDns" // dump dns
+  | "dumpEvent" // dump event
+  | "dumpVirtualIpDb" // dump virtual-ip-db
   | "dumpTempRule" // dump temp-rule
   | "dumpProfileEffective" // dump profile effective
   | "dumpProfileOriginal" // dump profile original
@@ -101,7 +104,9 @@ export type SurgeAction =
   | "diagnostics" // diagnostics
   | "kill" // kill <connection-id>
   | "setLogLevel" // set-log-level <level>
-  | "setEnvironment"; // set <key-path> <value>
+  | "setEnvironment" // set <key-path> <value>
+  | "scriptEvaluate" // script evaluate <script-js-path>
+  | "checkProfile"; // --check <path>
 
 export type ConnectionPhase =
   | "disconnected"

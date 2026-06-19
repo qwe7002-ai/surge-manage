@@ -171,13 +171,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> selectPolicy(String group, String policy) => _guard(() async {
         await _manager!
-            .run(SurgeAction.setEnvironment, ['ProxyGroupSelection.$group=$policy']);
+            .run(SurgeAction.setEnvironment, ['ProxyGroupSelection.$group', policy]);
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
 
   Future<void> setProxyMode(int mode) => _guard(() async {
-        await _manager!.run(SurgeAction.setEnvironment, ['ProxyMode=$mode']);
+        await _manager!.run(SurgeAction.setEnvironment, ['ProxyMode', '$mode']);
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
@@ -255,7 +255,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> setToggle(String key, bool on) => _guard(() async {
-        await _manager!.run(SurgeAction.setEnvironment, ['$key=${on ? 1 : 0}']);
+        await _manager!.run(SurgeAction.setEnvironment, [key, '${on ? 1 : 0}']);
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });

@@ -27,7 +27,13 @@ const profile: SurgeProfile = { bin: "surge" };
 test("buildCommandLine maps to real surge commands with --raw", () => {
   assert.equal(buildCommandLine(profile, "environment"), "surge --raw environment");
   assert.equal(buildCommandLine(profile, "dumpPolicy"), "surge --raw dump policy");
+  assert.equal(buildCommandLine(profile, "dumpEvent"), "surge --raw dump event");
+  assert.equal(
+    buildCommandLine(profile, "dumpVirtualIpDb"),
+    "surge --raw dump virtual-ip-db",
+  );
   assert.equal(buildCommandLine(profile, "reload"), "surge reload");
+  assert.equal(buildCommandLine(profile, "unattendedUpgrade"), "surge unattended-upgrade");
   assert.equal(
     buildCommandLine(profile, "switchProfile", ["Home Profile"]),
     "surge switch-profile 'Home Profile'",
@@ -37,6 +43,14 @@ test("buildCommandLine maps to real surge commands with --raw", () => {
   assert.equal(
     buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy", "HK"]),
     "surge set ProxyGroupSelection.Proxy HK",
+  );
+  assert.equal(
+    buildCommandLine(profile, "scriptEvaluate", ["/tmp/test.js"]),
+    "surge script evaluate /tmp/test.js",
+  );
+  assert.equal(
+    buildCommandLine(profile, "checkProfile", ["/tmp/Profile.conf"]),
+    "surge --check /tmp/Profile.conf",
   );
 });
 
@@ -209,6 +223,14 @@ test("buildCommandLine for temp-rule and external-resource", () => {
   assert.equal(
     buildCommandLine(profile, "externalResourceUpdateAll"),
     "surge external-resource update all",
+  );
+});
+
+test("buildCommandLine aligns with raw test commands", () => {
+  assert.equal(buildCommandLine(profile, "testNetwork"), "surge --raw test-network");
+  assert.equal(
+    buildCommandLine(profile, "testGroup", ["FINAL"]),
+    "surge --raw test-group FINAL",
   );
 });
 

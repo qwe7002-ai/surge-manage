@@ -30,6 +30,12 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     mutates: true,
     arity: 1,
   },
+  unattendedUpgrade: {
+    action: "unattendedUpgrade",
+    argv: ["unattended-upgrade"],
+    mutates: true,
+    arity: 0,
+  },
   // inspection (--raw → JSON)
   environment: { action: "environment", argv: ["--raw", "environment"], mutates: false, arity: 0 },
   dumpPolicy: { action: "dumpPolicy", argv: ["--raw", "dump", "policy"], mutates: false, arity: 0 },
@@ -43,6 +49,13 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   dumpActive: { action: "dumpActive", argv: ["--raw", "dump", "active"], mutates: false, arity: 0 },
   dumpRequest: { action: "dumpRequest", argv: ["--raw", "dump", "request"], mutates: false, arity: 0 },
   dumpDns: { action: "dumpDns", argv: ["--raw", "dump", "dns"], mutates: false, arity: 0 },
+  dumpEvent: { action: "dumpEvent", argv: ["--raw", "dump", "event"], mutates: false, arity: 0 },
+  dumpVirtualIpDb: {
+    action: "dumpVirtualIpDb",
+    argv: ["--raw", "dump", "virtual-ip-db"],
+    mutates: false,
+    arity: 0,
+  },
   dumpTempRule: {
     action: "dumpTempRule",
     argv: ["--raw", "dump", "temp-rule"],
@@ -70,7 +83,7 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     arity: 0,
   },
   // testing (--raw → JSON latency results)
-  testNetwork: { action: "testNetwork", argv: ["test-network"], mutates: false, arity: 0 },
+  testNetwork: { action: "testNetwork", argv: ["--raw", "test-network"], mutates: false, arity: 0 },
   testPolicy: { action: "testPolicy", argv: ["--raw", "test-policy", "{0}"], mutates: false, arity: 1 },
   testAllPolicies: {
     action: "testAllPolicies",
@@ -78,7 +91,7 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     mutates: false,
     arity: 0,
   },
-  testGroup: { action: "testGroup", argv: ["--raw", "test-group", "{0}"], mutates: true, arity: 1 },
+  testGroup: { action: "testGroup", argv: ["--raw", "test-group", "{0}"], mutates: false, arity: 1 },
   testPolicyBandwidth: {
     action: "testPolicyBandwidth",
     argv: ["test-policy-bandwidth", "{0}", "{1}"], // <download|upload> <policy>
@@ -127,6 +140,18 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   setLogLevel: { action: "setLogLevel", argv: ["set-log-level", "{0}"], mutates: true, arity: 1 },
   // `set` takes a key path and a separate value token.
   setEnvironment: { action: "setEnvironment", argv: ["set", "{0}", "{1}"], mutates: true, arity: 2 },
+  scriptEvaluate: {
+    action: "scriptEvaluate",
+    argv: ["script", "evaluate", "{0}"],
+    mutates: false,
+    arity: 1,
+  },
+  checkProfile: {
+    action: "checkProfile",
+    argv: ["--check", "{0}"],
+    mutates: false,
+    arity: 1,
+  },
 };
 
 /**

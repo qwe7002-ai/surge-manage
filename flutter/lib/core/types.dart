@@ -11,6 +11,7 @@ enum SurgeAction {
   reload,
   stop,
   switchProfile,
+  unattendedUpgrade,
   environment,
   dumpPolicy,
   dumpPolicySubPolicies,
@@ -18,6 +19,8 @@ enum SurgeAction {
   dumpActive,
   dumpRequest,
   dumpDns,
+  dumpEvent,
+  dumpVirtualIpDb,
   dumpTempRule,
   dumpProfileEffective,
   dumpProfileOriginal,
@@ -39,6 +42,8 @@ enum SurgeAction {
   kill,
   setLogLevel,
   setEnvironment,
+  scriptEvaluate,
+  checkProfile,
 }
 
 enum ConnectionPhase {

@@ -28,6 +28,11 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       argv: ['switch-profile', '{0}'],
       mutates: true,
       arity: 1),
+  SurgeAction.unattendedUpgrade: CommandSpec(
+      action: SurgeAction.unattendedUpgrade,
+      argv: ['unattended-upgrade'],
+      mutates: true,
+      arity: 0),
   SurgeAction.environment: CommandSpec(
       action: SurgeAction.environment, argv: ['--raw', 'environment'], mutates: false, arity: 0),
   SurgeAction.dumpPolicy: CommandSpec(
@@ -45,6 +50,13 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       action: SurgeAction.dumpRequest, argv: ['--raw', 'dump', 'request'], mutates: false, arity: 0),
   SurgeAction.dumpDns: CommandSpec(
       action: SurgeAction.dumpDns, argv: ['--raw', 'dump', 'dns'], mutates: false, arity: 0),
+  SurgeAction.dumpEvent: CommandSpec(
+      action: SurgeAction.dumpEvent, argv: ['--raw', 'dump', 'event'], mutates: false, arity: 0),
+  SurgeAction.dumpVirtualIpDb: CommandSpec(
+      action: SurgeAction.dumpVirtualIpDb,
+      argv: ['--raw', 'dump', 'virtual-ip-db'],
+      mutates: false,
+      arity: 0),
   SurgeAction.dumpTempRule: CommandSpec(
       action: SurgeAction.dumpTempRule,
       argv: ['--raw', 'dump', 'temp-rule'],
@@ -67,7 +79,10 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       streaming: true,
       arity: 0),
   SurgeAction.testNetwork: CommandSpec(
-      action: SurgeAction.testNetwork, argv: ['test-network'], mutates: false, arity: 0),
+      action: SurgeAction.testNetwork,
+      argv: ['--raw', 'test-network'],
+      mutates: false,
+      arity: 0),
   // test-* need --raw to emit JSON latency results.
   SurgeAction.testPolicy: CommandSpec(
       action: SurgeAction.testPolicy,
@@ -82,7 +97,7 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
   SurgeAction.testGroup: CommandSpec(
       action: SurgeAction.testGroup,
       argv: ['--raw', 'test-group', '{0}'],
-      mutates: true,
+      mutates: false,
       arity: 1),
   SurgeAction.testPolicyBandwidth: CommandSpec(
       action: SurgeAction.testPolicyBandwidth,
@@ -124,9 +139,22 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       CommandSpec(action: SurgeAction.kill, argv: ['kill', '{0}'], mutates: true, arity: 1),
   SurgeAction.setLogLevel: CommandSpec(
       action: SurgeAction.setLogLevel, argv: ['set-log-level', '{0}'], mutates: true, arity: 1),
-  // `set` takes one "key=value" token as {0} (e.g. "ProxyGroupSelection.Proxy=HK").
+  // `set` takes a key path and a separate value token.
   SurgeAction.setEnvironment: CommandSpec(
-      action: SurgeAction.setEnvironment, argv: ['set', '{0}'], mutates: true, arity: 1),
+      action: SurgeAction.setEnvironment,
+      argv: ['set', '{0}', '{1}'],
+      mutates: true,
+      arity: 2),
+  SurgeAction.scriptEvaluate: CommandSpec(
+      action: SurgeAction.scriptEvaluate,
+      argv: ['script', 'evaluate', '{0}'],
+      mutates: false,
+      arity: 1),
+  SurgeAction.checkProfile: CommandSpec(
+      action: SurgeAction.checkProfile,
+      argv: ['--check', '{0}'],
+      mutates: false,
+      arity: 1),
 };
 
 /// List profile files in the configured Surge config directory (plain `ls`).
