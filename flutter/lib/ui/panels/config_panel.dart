@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/types.dart';
 import '../../state/app_state.dart';
+import '../section_editor.dart';
 
 class ConfigPanel extends StatefulWidget {
   const ConfigPanel({super.key});
@@ -12,6 +13,55 @@ class ConfigPanel extends StatefulWidget {
 }
 
 class _ConfigPanelState extends State<ConfigPanel> {
+  bool _proxies = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppState>().refreshProfiles();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('Proxies')),
+              ButtonSegment(value: false, label: Text('Raw config')),
+            ],
+            selected: {_proxies},
+            onSelectionChanged: (s) => setState(() => _proxies = s.first),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _proxies
+              ? const SectionEditor(
+                  section: 'Proxy',
+                  placeholder: 'MyNode = vmess, server.com, 443, username=uuid, …',
+                  hint: 'Edits the [Proxy] section of the selected profile, then reloads.',
+                )
+              : const _RawConfig(),
+        ),
+      ],
+    );
+  }
+}
+
+class _RawConfig extends StatefulWidget {
+  const _RawConfig();
+
+  @override
+  State<_RawConfig> createState() => _RawConfigState();
+}
+
+class _RawConfigState extends State<_RawConfig> {
   bool _effective = true;
   String _content = '';
   bool _loading = false;

@@ -2,14 +2,45 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { SurgeAction } from "@surge-manage/shared";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Disconnected } from "@/components/Disconnected";
+import { SectionEditor } from "@/components/SectionEditor";
 import { useApp } from "@/store/app-store";
 
 type Which = "effective" | "original";
 
 export function ConfigPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
+  const refreshProfiles = useApp((s) => s.refreshProfiles);
+
+  useEffect(() => {
+    if (connected) void refreshProfiles();
+  }, [connected, refreshProfiles]);
+
+  if (!connected) return <Disconnected />;
+
+  return (
+    <Tabs defaultValue="proxies" className="flex h-full flex-col">
+      <TabsList className="self-start">
+        <TabsTrigger value="proxies">Proxies</TabsTrigger>
+        <TabsTrigger value="raw">Raw config</TabsTrigger>
+      </TabsList>
+      <TabsContent value="proxies" className="min-h-0 flex-1">
+        <SectionEditor
+          section="Proxy"
+          placeholder="MyNode = vmess, server.com, 443, username=uuid, …"
+          hint="Edits the [Proxy] section of the selected profile, then reloads Surge."
+        />
+      </TabsContent>
+      <TabsContent value="raw" className="min-h-0 flex-1">
+        <RawConfig />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** Read-only viewer of the resolved/original profile. */
+function RawConfig() {
   const [which, setWhich] = useState<Which>("effective");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,10 +62,8 @@ export function ConfigPanel() {
   }, []);
 
   useEffect(() => {
-    if (connected) void load(which);
-  }, [connected, which, load]);
-
-  if (!connected) return <Disconnected />;
+    void load(which);
+  }, [which, load]);
 
   return (
     <div className="flex h-full flex-col space-y-3">

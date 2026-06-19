@@ -12,6 +12,14 @@ import {
   parseSubPolicies,
   parseTempRules,
 } from "../dist/parsers.js";
+import {
+  getRuleEntries,
+  getSectionEntries,
+  parseConfigDocument,
+  serializeConfigDocument,
+  setRuleEntries,
+  setSectionEntries,
+} from "../dist/config-doc.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -51,6 +59,62 @@ test("parseEnvironment flattens, unwraps envelope, extracts selection/mode", () 
   // Also works without the envelope wrapper.
   const flat = parseEnvironment('{"ProxyMode":0}');
   assert.equal(flat.proxyMode, 0);
+});
+
+test("config-doc round-trips and edits one section without clobbering others", () => {
+  const text = [
+    "# header comment",
+    "[General]",
+    "loglevel = notify",
+    "",
+    "[Proxy]",
+    "HK = trojan, hk.com, 443",
+    "[Rule]",
+    "FINAL,Proxy",
+  ].join("\n");
+  const doc = parseConfigDocument(text);
+  assert.deepEqual(getSectionEntries(doc, "Proxy"), ["HK = trojan, hk.com, 443"]);
+  // Editing [Rule] must preserve [General] and its comment/blank lines.
+  const edited = setSectionEntries(doc, "Rule", [
+    "DOMAIN,a.com,DIRECT",
+    "FINAL,Proxy",
+  ]);
+  const out = serializeConfigDocument(edited);
+  assert.ok(out.includes("# header comment"));
+  assert.ok(out.includes("loglevel = notify"));
+  assert.ok(out.includes("DOMAIN,a.com,DIRECT"));
+  assert.ok(out.includes("HK = trojan, hk.com, 443"));
+  // A section added when absent is appended.
+  const withDns = setSectionEntries(doc, "DNS", ["server = 1.1.1.1"]);
+  assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
+});
+
+test("getRuleEntries classifies rules, disabled rules and plain comments", () => {
+  const text = [
+    "[Rule]",
+    "# === Streaming ===",
+    "DOMAIN-SUFFIX,active.com,Proxy",
+    "# DOMAIN-SUFFIX,disabled.com,DIRECT",
+    "",
+    "FINAL,Proxy",
+  ].join("\n");
+  const doc = parseConfigDocument(text);
+  const rules = getRuleEntries(doc, "Rule");
+  assert.deepEqual(rules, [
+    { text: "=== Streaming ===", enabled: false, comment: true },
+    { text: "DOMAIN-SUFFIX,active.com,Proxy", enabled: true, comment: false },
+    { text: "DOMAIN-SUFFIX,disabled.com,DIRECT", enabled: false, comment: false },
+    { text: "FINAL,Proxy", enabled: true, comment: false },
+  ]);
+  // Toggling rules and keeping the comment must survive a write → read trip.
+  const toggled = rules.map((r) =>
+    r.comment ? r : { ...r, enabled: !r.enabled },
+  );
+  const out = serializeConfigDocument(setRuleEntries(doc, "Rule", toggled));
+  assert.ok(out.includes("# === Streaming ==="));
+  assert.ok(out.includes("# DOMAIN-SUFFIX,active.com,Proxy"));
+  assert.ok(out.includes("\nDOMAIN-SUFFIX,disabled.com,DIRECT"));
+  assert.deepEqual(getRuleEntries(parseConfigDocument(out), "Rule"), toggled);
 });
 
 test("parseSubPolicies maps group → members", () => {
@@ -94,6 +158,20 @@ test("parseRules parses json and csv fallback", () => {
   assert.equal(csv.length, 2);
   assert.equal(csv[0]!.value, "google.com");
   assert.equal(csv[1]!.type, "FINAL");
+});
+
+test("parseRules reads the {rules:[...]} envelope of rule strings", () => {
+  const rules = parseRules(
+    '{"rules":["DOMAIN-SUFFIX,google.com,Proxy","GEOIP,CN,DIRECT","FINAL,Proxy,dns-failed"]}',
+  );
+  assert.equal(rules.length, 3);
+  assert.equal(rules[0]!.type, "DOMAIN-SUFFIX");
+  assert.equal(rules[0]!.value, "google.com");
+  assert.equal(rules[0]!.policy, "Proxy");
+  // FINAL has no matcher value: the token after FINAL is the policy.
+  assert.equal(rules[2]!.type, "FINAL");
+  assert.equal(rules[2]!.value, "");
+  assert.equal(rules[2]!.policy, "Proxy");
 });
 
 test("parseTempRules handles strings, objects, and text", () => {
@@ -151,4 +229,15 @@ test("parseActive + aggregateTraffic", () => {
   assert.equal(surge[0]!.id, "509447");
   assert.equal(surge[0]!.remote, "kws2.web.telegram.org:443");
   assert.equal(surge[0]!.policy, "asia-warp");
+});
+
+test("parseActive reads Surge {requests:[...]} envelope with numeric ids", () => {
+  const conns = parseActive(
+    '{"requests":[{"id":42,"remoteAddress":"a:443","policyName":"HK",' +
+      '"inBytes":1000,"outBytes":500}]}',
+  );
+  assert.equal(conns.length, 1);
+  assert.equal(conns[0]!.id, "42"); // numeric id coerced to string for `kill`
+  assert.equal(conns[0]!.policy, "HK");
+  assert.equal(conns[0]!.downloadBytes, 1000);
 });

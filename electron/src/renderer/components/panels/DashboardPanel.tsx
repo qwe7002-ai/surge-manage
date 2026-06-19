@@ -36,7 +36,6 @@ export function DashboardPanel() {
   const busy = useApp((s) => s.busy);
   const lastInfo = useApp((s) => s.lastInfo);
   const profiles = useApp((s) => s.profiles);
-  const refreshEnvironment = useApp((s) => s.refreshEnvironment);
   const refreshTraffic = useApp((s) => s.refreshTraffic);
   const runAction = useApp((s) => s.runAction);
   const setToggle = useApp((s) => s.setToggle);
@@ -50,55 +49,23 @@ export function DashboardPanel() {
     return <Disconnected hint="Select a host and press Connect to view live state." />;
   }
 
-  const envEntries = Object.entries(environment?.fields ?? {});
-
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Environment
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6"
-                disabled={busy}
-                onClick={() => void refreshEnvironment()}
-              >
-                <RefreshCw />
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-1 sm:grid-cols-2">
-            {envEntries.length === 0 && (
-              <span className="text-sm text-muted-foreground">No data.</span>
-            )}
-            {envEntries.map(([k, v]) => (
-              <div key={k} className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="truncate text-muted-foreground">{k}</span>
-                <span className="truncate font-medium">{v}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Activity className="h-4 w-4" /> Connections
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-3xl font-semibold tabular-nums">
-              {traffic?.connections ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground">active connections</p>
-            <Stat label="Down (session)" value={formatBytes(traffic?.downloadTotal)} />
-            <Stat label="Up (session)" value={formatBytes(traffic?.uploadTotal)} />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Activity className="h-4 w-4" /> Connections
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <div className="text-3xl font-semibold tabular-nums">
+            {traffic?.connections ?? 0}
+          </div>
+          <p className="text-xs text-muted-foreground">active connections</p>
+          <Stat label="Down (session)" value={formatBytes(traffic?.downloadTotal)} />
+          <Stat label="Up (session)" value={formatBytes(traffic?.uploadTotal)} />
+        </CardContent>
+      </Card>
 
       {profiles.length > 0 && (
         <Card>

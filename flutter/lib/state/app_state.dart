@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/config_doc.dart';
 import '../core/connection.dart';
 import '../core/parsers.dart';
 import '../core/secure_store.dart';
@@ -25,6 +26,8 @@ class AppState extends ChangeNotifier {
   Traffic? traffic;
   List<ActiveConnection> connections = [];
   List<String> profiles = [];
+  /// Profile whose config file the structured editors read/write.
+  String? activeProfile;
   final List<LogLine> logs = [];
   bool logStreaming = false;
   bool busy = false;
@@ -32,6 +35,7 @@ class AppState extends ChangeNotifier {
   String? lastInfo;
 
   static const _maxLogLines = 2000;
+  bool _trafficInFlight = false;
 
   ConnectionManager? _manager;
   StreamSubscription<ConnectionState>? _stateSub;
@@ -151,6 +155,8 @@ class AppState extends ChangeNotifier {
       });
 
   Future<void> refreshPolicies() => _guard(() async {
+        // Read the live running instance only — names, members and selection all
+        // come from the environment, never the static profile config.
         final dump = await _manager!.run(SurgeAction.dumpPolicy);
         policies = parsePolicies(dump.stdout);
         try {
@@ -203,6 +209,12 @@ class AppState extends ChangeNotifier {
         tempRules = parseTempRules(r.stdout);
       });
 
+  Future<void> updateTempRule(String oldRule, String newRule) => _guard(() async {
+        await _manager!.run(SurgeAction.updateTempRule, [oldRule, newRule]);
+        final r = await _manager!.run(SurgeAction.dumpTempRule);
+        tempRules = parseTempRules(r.stdout);
+      });
+
   Future<void> flushTempRules() => _guard(() async {
         await _manager!.run(SurgeAction.flushTempRule);
         tempRules = [];
@@ -226,6 +238,10 @@ class AppState extends ChangeNotifier {
       });
 
   Future<void> refreshTraffic() async {
+    // Guard against overlapping polls: a slow `dump active` on a busy node must
+    // not pile up exec calls (which froze the Connections page).
+    if (_trafficInFlight) return;
+    _trafficInFlight = true;
     try {
       final r = await _manager!.run(SurgeAction.dumpActive);
       connections = parseActive(r.stdout);
@@ -233,6 +249,8 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     } catch (_) {
       /* best-effort polling */
+    } finally {
+      _trafficInFlight = false;
     }
   }
 
@@ -250,17 +268,75 @@ class AppState extends ChangeNotifier {
   Future<void> refreshProfiles() async {
     try {
       profiles = await _manager!.listProfiles();
+      if (activeProfile == null || !profiles.contains(activeProfile)) {
+        activeProfile = profiles.isNotEmpty ? profiles.first : null;
+      }
       notifyListeners();
     } catch (_) {
       profiles = [];
+      activeProfile = null;
     }
+  }
+
+  void setActiveProfile(String name) {
+    activeProfile = name;
+    notifyListeners();
   }
 
   Future<void> switchProfile(String name) => _guard(() async {
         await _manager!.run(SurgeAction.switchProfile, [name]);
+        activeProfile = name;
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
         await refreshPolicies();
+      });
+
+  /// Remote profile path: `<configDir>/<profile>.conf`, defaulting the dir.
+  String _profilePath(String profile) {
+    final host = selectedHost;
+    final raw = host?.configDir?.trim();
+    final dir = (raw != null && raw.isNotEmpty) ? raw : kDefaultConfigDir;
+    final trimmed = dir.replaceAll(RegExp(r'/+$'), '');
+    return '$trimmed/$profile.conf';
+  }
+
+  /// Read a config section's entry lines from a profile file.
+  Future<List<String>> readProfileSection(String profile, String section) async {
+    final text = await _manager!.readProfile(_profilePath(profile));
+    return getSectionEntries(parseConfigDocument(text), section);
+  }
+
+  /// Replace a config section's entries in a profile file, then reload.
+  Future<void> writeProfileSection(
+    String profile,
+    String section,
+    List<String> entries,
+  ) =>
+      _guard(() async {
+        final path = _profilePath(profile);
+        // Read-modify-write so we only touch this section, preserving the rest.
+        final text = await _manager!.readProfile(path);
+        final next = setSectionEntries(parseConfigDocument(text), section, entries);
+        await _manager!.writeProfile(path, serializeConfigDocument(next));
+        await _manager!.run(SurgeAction.reload);
+        lastInfo = 'Saved $section to $profile.conf and reloaded';
+      });
+
+  /// Read the `[Rule]` section as ordered rules, including `#`-disabled ones.
+  Future<List<RuleEntry>> readProfileRules(String profile) async {
+    final text = await _manager!.readProfile(_profilePath(profile));
+    return getRuleEntries(parseConfigDocument(text), 'Rule');
+  }
+
+  /// Replace the `[Rule]` section from rule entries (disabled → `#`), reload.
+  Future<void> writeProfileRules(String profile, List<RuleEntry> entries) =>
+      _guard(() async {
+        final path = _profilePath(profile);
+        final text = await _manager!.readProfile(path);
+        final next = setRuleEntries(parseConfigDocument(text), 'Rule', entries);
+        await _manager!.writeProfile(path, serializeConfigDocument(next));
+        await _manager!.run(SurgeAction.reload);
+        lastInfo = 'Saved Rule to $profile.conf and reloaded';
       });
 
   void _mergeTests(List<PolicyTest> tests) {

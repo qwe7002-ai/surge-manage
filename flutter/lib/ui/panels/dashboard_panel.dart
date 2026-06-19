@@ -17,7 +17,6 @@ class DashboardPanel extends StatelessWidget {
     final state = context.watch<AppState>();
     final env = state.environment;
     final traffic = state.traffic;
-    final envEntries = env?.fields.entries.toList() ?? const [];
 
     return ListView(
       children: [
@@ -29,18 +28,6 @@ class DashboardPanel extends StatelessWidget {
             children: [
               _row('Down (session)', formatBytes(traffic?.downloadTotal)),
               _row('Up (session)', formatBytes(traffic?.uploadTotal)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        FCard(
-          title: const Text('Environment'),
-          child: Column(
-            children: [
-              if (envEntries.isEmpty)
-                const Text('No data.', style: TextStyle(color: Colors.white54))
-              else
-                ...envEntries.map((e) => _row(e.key, e.value)),
             ],
           ),
         ),

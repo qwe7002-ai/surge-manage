@@ -122,29 +122,58 @@ List<PolicyTest> parsePolicyTests(String stdout) {
   return out;
 }
 
+/// Parse one classic comma-separated rule line into a Rule.
+///   "DOMAIN-SUFFIX,google.com,Proxy" → matcher rule (type,value,policy)
+///   "FINAL,Proxy" / "FINAL,Proxy,dns-failed" → FINAL rule (no value)
+Rule? _parseRuleLine(String line) {
+  final parts = line.split(',').map((p) => p.trim()).toList();
+  if (parts.isEmpty) return null;
+  final type = parts[0];
+  if (type.isEmpty) return null;
+  // FINAL has no matcher value: the second token is the policy itself.
+  if (type == 'FINAL') {
+    return parts.length >= 2 ? Rule(type: type, value: '', policy: parts[1]) : null;
+  }
+  if (parts.length < 3) return null;
+  return Rule(type: type, value: parts[1], policy: parts[2]);
+}
+
+/// `surge --raw dump rule` → {"rules":["DOMAIN-SUFFIX,google.com,Proxy", ...]}
+/// (each entry is a rule string). Tolerant of a bare array, an array of
+/// {type,value,policy} objects, or plain newline-delimited text.
 List<Rule> parseRules(String stdout) {
   final json = _tryJson(stdout);
-  if (json is List) {
-    return json.whereType<Map>().map((r) {
-      return Rule(
-        type: _str(r['type']) ?? '',
-        value: _str(r['value']) ?? _str(r['pattern']) ?? '',
-        policy: _str(r['policy']) ?? _str(r['target']) ?? '',
-        hits: _num(r['hits'])?.toInt() ?? _num(r['count'])?.toInt(),
-      );
-    }).where((r) => r.type.isNotEmpty).toList();
+  final arr = json is List
+      ? json
+      : (json is Map && json['rules'] is List)
+          ? json['rules'] as List
+          : null;
+  if (arr != null) {
+    final out = <Rule>[];
+    for (final item in arr) {
+      if (item is String) {
+        final r = _parseRuleLine(item);
+        if (r != null) out.add(r);
+      } else if (item is Map) {
+        final type = _str(item['type']) ?? '';
+        if (type.isEmpty) continue;
+        out.add(Rule(
+          type: type,
+          value: _str(item['value']) ?? _str(item['pattern']) ?? '',
+          policy: _str(item['policy']) ?? _str(item['target']) ?? '',
+          hits: _num(item['hits'])?.toInt() ?? _num(item['count'])?.toInt(),
+        ));
+      }
+    }
+    return out;
   }
-  // CSV fallback: "DOMAIN-SUFFIX,google.com,Proxy"
+  // Fallback: classic comma-separated rule lines, one per line.
   final out = <Rule>[];
   for (final line in const LineSplitter().convert(stdout)) {
     final t = line.trim();
     if (t.isEmpty || t.startsWith('#')) continue;
-    final parts = t.split(',').map((p) => p.trim()).toList();
-    if (parts.length >= 3) {
-      out.add(Rule(type: parts[0], value: parts[1], policy: parts[2]));
-    } else if (parts.length == 2 && parts[0] == 'FINAL') {
-      out.add(Rule(type: 'FINAL', value: '', policy: parts[1]));
-    }
+    final r = _parseRuleLine(t);
+    if (r != null) out.add(r);
   }
   return out;
 }
@@ -198,21 +227,33 @@ List<ExternalResource> parseExternalResources(String stdout) {
   }).where((r) => r.key.isNotEmpty).toList();
 }
 
-/// `surge --raw dump active` → list of active connections.
+/// Coerce a string-or-number id into a string (Surge uses numeric ids).
+String? _idStr(dynamic v) {
+  if (v is num) return '$v';
+  return _str(v);
+}
+
+/// `surge --raw dump active` → list of active connections. Surge returns the
+/// active requests under a `requests` envelope (`{"requests":[...]}`); older/
+/// forked shapes use `connections` or a bare array — all are accepted.
 List<ActiveConnection> parseActive(String stdout) {
   final json = _tryJson(stdout);
   final list = json is List
       ? json
-      : (json is Map && json['connections'] is List)
-          ? json['connections'] as List
-          : const [];
+      : (json is Map && json['requests'] is List)
+          ? json['requests'] as List
+          : (json is Map && json['connections'] is List)
+              ? json['connections'] as List
+              : const [];
   var i = 0;
   return list.whereType<Map>().map((c) {
     final conn = ActiveConnection(
-      id: _str(c['id']) ?? _str(c['connectionId']) ?? '${i}',
+      // Surge request ids are numbers; keep them as strings for `kill <id>`.
+      id: _idStr(c['id']) ?? _idStr(c['connectionId']) ?? '$i',
       remote: _str(c['remoteAddress']) ??
           _str(c['remote']) ??
           _str(c['host']) ??
+          _str(c['URL']) ??
           _str(c['url']) ??
           '—',
       policy: _str(c['policyName']) ?? _str(c['policy']) ?? _str(c['proxy']),

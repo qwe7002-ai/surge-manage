@@ -73,6 +73,36 @@ export function execStream(
   });
 }
 
+/** Read a remote file's contents as UTF-8 over SFTP. */
+export function readRemoteFile(conn: Client, path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) return reject(err);
+      sftp.readFile(path, (readErr, buf) => {
+        if (readErr) return reject(readErr);
+        resolve(buf.toString("utf8"));
+      });
+    });
+  });
+}
+
+/** Write a remote file's contents as UTF-8 over SFTP (overwrites). */
+export function writeRemoteFile(
+  conn: Client,
+  path: string,
+  content: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) return reject(err);
+      sftp.writeFile(path, Buffer.from(content, "utf8"), (writeErr) => {
+        if (writeErr) return reject(writeErr);
+        resolve();
+      });
+    });
+  });
+}
+
 async function buildConnectConfig(host: HostConfig): Promise<ConnectConfig> {
   const base: ConnectConfig = {
     host: host.host,

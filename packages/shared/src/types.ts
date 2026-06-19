@@ -34,7 +34,7 @@ export interface HostConfig {
 
 /** Per-host customisation of the surge command catalog. */
 export interface SurgeProfile {
-  /** Absolute path to the Surge CLI binary. */
+  /** Binary name or absolute path. Default: {@link DEFAULT_SURGE_BIN}. */
   bin: string;
   /**
    * Optional argv overrides keyed by {@link SurgeAction}. When present, replaces
@@ -43,8 +43,20 @@ export interface SurgeProfile {
   argv?: Partial<Record<SurgeAction, string[]>>;
 }
 
+/**
+ * Default Surge CLI location. Per the docs this is the macOS bundle path; on
+ * other platforms or custom installs, override it per host. A bare `surge-cli`
+ * is rarely on `PATH`, so we default to the documented absolute path.
+ */
 export const DEFAULT_SURGE_BIN =
   "/Applications/Surge.app/Contents/Applications/surge-cli";
+
+/**
+ * Default Surge profile directory (macOS). Used when a host doesn't specify its
+ * own `configDir`, so profile listing/editing still works out of the box.
+ */
+export const DEFAULT_CONFIG_DIR =
+  "~/Library/Application Support/Surge/Profiles";
 
 /**
  * Actions map 1:1 onto real Surge CLI commands (see the CLI reference). Query

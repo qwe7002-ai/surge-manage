@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import {
   aggregateTraffic,
+  DEFAULT_CONFIG_DIR,
+  getRuleEntries,
+  getSectionEntries,
+  parseConfigDocument,
+  serializeConfigDocument,
+  setRuleEntries,
+  setSectionEntries,
   parseActive,
   parseEnvironment,
   parsePolicies,
@@ -18,6 +25,7 @@ import {
   type PolicyDump,
   type PolicyTest,
   type Rule,
+  type RuleEntry,
   type SurgeAction,
   type Traffic,
 } from "@surge-manage/shared";
@@ -38,11 +46,15 @@ interface AppState {
   traffic: Traffic | null;
   connections: ActiveConnection[];
   profiles: string[];
+  /** Profile whose config file structured editors read/write. */
+  activeProfile: string | null;
   logs: LogLine[];
   logStreaming: boolean;
   busy: boolean;
   lastError: string | null;
   lastInfo: string | null;
+  /** Internal: prevents overlapping `refreshTraffic` polls. */
+  _trafficInFlight: boolean;
 
   init: () => Promise<void>;
   refreshHosts: () => Promise<void>;
@@ -57,6 +69,7 @@ interface AppState {
   refreshTempRules: () => Promise<void>;
   addTempRule: (rule: string) => Promise<void>;
   delTempRule: (rule: string) => Promise<void>;
+  updateTempRule: (oldRule: string, newRule: string) => Promise<void>;
   flushTempRules: () => Promise<void>;
   refreshResources: () => Promise<void>;
   updateResource: (key: string) => Promise<void>;
@@ -68,6 +81,19 @@ interface AppState {
   killConnection: (id: string) => Promise<void>;
   refreshProfiles: () => Promise<void>;
   switchProfile: (name: string) => Promise<void>;
+  setActiveProfile: (name: string) => void;
+  /** Read a config section's entry lines from a profile file. */
+  readProfileSection: (profile: string, section: string) => Promise<string[]>;
+  /** Replace a config section's entries in a profile file, then reload. */
+  writeProfileSection: (
+    profile: string,
+    section: string,
+    entries: string[],
+  ) => Promise<void>;
+  /** Read the [Rule] section as ordered rules, including #-disabled ones. */
+  readProfileRules: (profile: string) => Promise<RuleEntry[]>;
+  /** Replace the [Rule] section from rule entries (disabled → `#`), reload. */
+  writeProfileRules: (profile: string, entries: RuleEntry[]) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
   /** Run a no-arg or single-arg surge action and surface its result text. */
@@ -91,11 +117,13 @@ export const useApp = create<AppState>((set, get) => ({
   traffic: null,
   connections: [],
   profiles: [],
+  activeProfile: null,
   logs: [],
   logStreaming: false,
   busy: false,
   lastError: null,
   lastInfo: null,
+  _trafficInFlight: false,
 
   async init() {
     window.surge.connection.onState((connection) => {
@@ -184,8 +212,11 @@ export const useApp = create<AppState>((set, get) => ({
         window.surge.surge.run("dumpPolicy"),
         window.surge.surge.run("dumpPolicySubPolicies").catch(() => null),
       ]);
+      const dumped = parsePolicies(dump.stdout);
+      // Read the live running instance only — names, members and selection all
+      // come from the environment, never the static profile config.
       set({
-        policies: parsePolicies(dump.stdout),
+        policies: { proxies: dumped.proxies, groups: dumped.groups },
         subPolicies: subs ? parseSubPolicies(subs.stdout) : {},
       });
       // Selection lives in the environment dictionary.
@@ -223,6 +254,13 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
+  async updateTempRule(oldRule, newRule) {
+    await guarded(set, async () => {
+      await window.surge.surge.run("updateTempRule", [oldRule, newRule]);
+      await get().refreshTempRules();
+    });
+  },
+
   async flushTempRules() {
     await guarded(set, async () => {
       await window.surge.surge.run("flushTempRule");
@@ -252,12 +290,18 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async refreshTraffic() {
+    // Guard against overlapping polls: a slow `dump active` on a busy node must
+    // not pile up exec calls (which froze the Connections page).
+    if (get()._trafficInFlight) return;
+    set({ _trafficInFlight: true });
     try {
       const r = await window.surge.surge.run("dumpActive");
       const connections = parseActive(r.stdout);
       set({ connections, traffic: aggregateTraffic(connections) });
     } catch {
       /* polling is best-effort */
+    } finally {
+      set({ _trafficInFlight: false });
     }
   },
 
@@ -277,17 +321,63 @@ export const useApp = create<AppState>((set, get) => ({
 
   async refreshProfiles() {
     try {
-      set({ profiles: await window.surge.profiles.list() });
+      const profiles = await window.surge.profiles.list();
+      set((s) => ({
+        profiles,
+        activeProfile:
+          s.activeProfile && profiles.includes(s.activeProfile)
+            ? s.activeProfile
+            : profiles[0] ?? null,
+      }));
     } catch {
-      set({ profiles: [] });
+      set({ profiles: [], activeProfile: null });
     }
   },
 
   async switchProfile(name) {
     await guarded(set, async () => {
       await window.surge.surge.run("switchProfile", [name]);
+      set({ activeProfile: name });
       await get().refreshEnvironment();
       await get().refreshPolicies();
+    });
+  },
+
+  setActiveProfile(name) {
+    set({ activeProfile: name });
+  },
+
+  async readProfileSection(profile, section) {
+    const text = await window.surge.profiles.read(profilePath(get, profile));
+    return getSectionEntries(parseConfigDocument(text), section);
+  },
+
+  async writeProfileSection(profile, section, entries) {
+    await guarded(set, async () => {
+      const path = profilePath(get, profile);
+      // Read-modify-write so we only touch this section and preserve the rest.
+      const text = await window.surge.profiles.read(path);
+      const next = setSectionEntries(parseConfigDocument(text), section, entries);
+      await window.surge.profiles.write(path, serializeConfigDocument(next));
+      // Apply the change if we edited the active profile.
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved ${section} to ${profile}.conf and reloaded` });
+    });
+  },
+
+  async readProfileRules(profile) {
+    const text = await window.surge.profiles.read(profilePath(get, profile));
+    return getRuleEntries(parseConfigDocument(text), "Rule");
+  },
+
+  async writeProfileRules(profile, entries) {
+    await guarded(set, async () => {
+      const path = profilePath(get, profile);
+      const text = await window.surge.profiles.read(path);
+      const next = setRuleEntries(parseConfigDocument(text), "Rule", entries);
+      await window.surge.profiles.write(path, serializeConfigDocument(next));
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved Rule to ${profile}.conf and reloaded` });
     });
   },
 
@@ -358,6 +448,14 @@ export const useApp = create<AppState>((set, get) => ({
 
 type SetFn = (partial: Partial<AppState>) => void;
 type GetFn = () => AppState;
+
+/** Build the remote profile path: `<configDir>/<profile>.conf`. */
+function profilePath(get: GetFn, profile: string): string {
+  const host = get().hosts.find((h) => h.id === get().selectedHostId);
+  // Fall back to Surge's default profile directory when the host omits one.
+  const dir = host?.configDir?.trim() || DEFAULT_CONFIG_DIR;
+  return `${dir.replace(/\/+$/, "")}/${profile}.conf`;
+}
 
 function mergeTests(set: SetFn, get: GetFn, tests: PolicyTest[]): void {
   const next = { ...get().policyTests };

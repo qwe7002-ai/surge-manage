@@ -20,10 +20,20 @@ export function ConnectionsPanel() {
 
   if (!connected) return <Disconnected />;
 
+  // Busy nodes can report thousands of connections; rendering them all (and
+  // re-rendering every poll) froze the page. Cap the rows we draw.
+  const MAX_ROWS = 300;
+  const shown = connections.slice(0, MAX_ROWS);
+
   return (
     <div className="flex h-full flex-col space-y-3">
       <div className="flex items-center gap-2">
         <Badge variant="secondary">{connections.length} active</Badge>
+        {connections.length > MAX_ROWS && (
+          <span className="text-xs text-muted-foreground">
+            showing first {MAX_ROWS}
+          </span>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -47,7 +57,7 @@ export function ConnectionsPanel() {
             </tr>
           </thead>
           <tbody>
-            {connections.map((c) => (
+            {shown.map((c) => (
               <tr key={c.id} className="border-b last:border-0 hover:bg-accent/40">
                 <td className="px-3 py-1.5 font-mono text-xs">{c.remote}</td>
                 <td className="px-3 py-1.5">{c.policy ?? "—"}</td>
