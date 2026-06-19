@@ -3,4 +3,5 @@ export * from "./commands.js";
 export * from "./parsers.js";
 export * from "./config-doc.js";
 export * from "./proxy.js";
+export * from "./rule.js";
 export * from "./ipc.js";

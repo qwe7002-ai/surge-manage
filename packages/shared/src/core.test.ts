@@ -33,6 +33,12 @@ import {
   setProxyParam,
 } from "../dist/proxy.js";
 import { parseInterfaces } from "../dist/parsers.js";
+import {
+  isLogicalRuleType,
+  parseRuleLine,
+  ruleTypeHasValue,
+  serializeRuleLine,
+} from "../dist/rule.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -420,4 +426,27 @@ test("groupedProxyFields buckets fields into ordered sections", () => {
   const direct = groupedProxyFields("direct");
   assert.deepEqual(direct.map((g) => g.id), ["egress"]);
   assert.deepEqual(direct[0].fields.map((f) => f.key), ["interface"]);
+});
+
+test("parseRuleLine splits matcher rules and FINAL, round-trips", () => {
+  const r = parseRuleLine("IP-CIDR,10.0.0.0/8,DIRECT,no-resolve")!;
+  assert.equal(r.type, "IP-CIDR");
+  assert.equal(r.value, "10.0.0.0/8");
+  assert.equal(r.policy, "DIRECT");
+  assert.deepEqual(r.options, ["no-resolve"]);
+  assert.equal(serializeRuleLine(r), "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve");
+
+  const fin = parseRuleLine("FINAL,Proxy,dns-failed")!;
+  assert.equal(fin.type, "FINAL");
+  assert.equal(fin.value, "");
+  assert.equal(fin.policy, "Proxy");
+  assert.equal(serializeRuleLine(fin), "FINAL,Proxy,dns-failed");
+});
+
+test("parseRuleLine declines logical and malformed rules (raw fallback)", () => {
+  assert.equal(parseRuleLine("AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy"), undefined);
+  assert.equal(isLogicalRuleType("OR"), true);
+  assert.equal(parseRuleLine("DOMAIN-SUFFIX,example.com"), undefined); // no policy
+  assert.equal(ruleTypeHasValue("FINAL"), false);
+  assert.equal(ruleTypeHasValue("DOMAIN"), true);
 });
