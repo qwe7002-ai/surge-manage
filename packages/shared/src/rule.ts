@@ -17,7 +17,12 @@ export interface RuleLine {
   options: string[];
 }
 
-/** Rule matcher types offered in the editor, grouped roughly by what they match. */
+/**
+ * Simple matcher rule types offered in the editor's Type dropdown, grouped
+ * roughly by what they match. Logical combinators (`AND`/`OR`/`NOT`) are NOT
+ * here — they nest sub-rules and are built on the editor's dedicated Logical
+ * tab; see {@link LOGICAL_RULE_TYPES} and {@link parseLogicalRule}.
+ */
 export const RULE_TYPES = [
   // Domain
   "DOMAIN",
@@ -41,14 +46,14 @@ export const RULE_TYPES = [
   // Content
   "USER-AGENT",
   "URL-REGEX",
-  // Resources / logic / fallback
+  // Resources / fallback
   "RULE-SET",
   "SCRIPT",
-  "AND",
-  "OR",
-  "NOT",
   "FINAL",
 ] as const;
+
+/** Logical combinators, built on the editor's Logical tab. */
+export const LOGICAL_RULE_TYPES = ["AND", "OR", "NOT"] as const;
 
 /** Types that take no matcher value — the token after the type is the policy. */
 const NO_VALUE_TYPES = new Set(["FINAL"]);
@@ -116,6 +121,100 @@ export function serializeRuleLine(rule: RuleLine): string {
   const parts = [rule.type.trim()];
   if (ruleTypeHasValue(rule.type) && rule.value.trim()) parts.push(rule.value.trim());
   if (rule.policy.trim()) parts.push(rule.policy.trim());
+  for (const opt of rule.options) {
+    if (opt.trim()) parts.push(opt.trim());
+  }
+  return parts.join(",");
+}
+
+/* ------------------------------ Logical rules ----------------------------- */
+
+/** One matcher inside a logical rule, e.g. `(DOMAIN,a.com)`. */
+export interface LogicalSubRule {
+  type: string;
+  value: string;
+}
+
+/**
+ * A logical rule: an `AND`/`OR`/`NOT` combinator over a list of sub-matchers,
+ * targeting a policy. Syntax:
+ *   `AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy`
+ */
+export interface LogicalRule {
+  operator: string;
+  conditions: LogicalSubRule[];
+  policy: string;
+  options: string[];
+}
+
+/**
+ * Parse a logical rule into a {@link LogicalRule}. Returns undefined when the
+ * line isn't a (single-level) logical rule, so the caller can fall back to raw
+ * editing for deeply nested combinations.
+ */
+export function parseLogicalRule(text: string): LogicalRule | undefined {
+  const t = text.trim();
+  const m = /^(AND|OR|NOT)\s*,\s*\(/i.exec(t);
+  if (!m) return undefined;
+  const operator = m[1]!.toUpperCase();
+
+  // Walk from the group's opening "(" to its matching close, tracking depth.
+  const groupStart = m[0].length - 1;
+  let depth = 0;
+  let groupEnd = -1;
+  for (let i = groupStart; i < t.length; i++) {
+    if (t[i] === "(") depth++;
+    else if (t[i] === ")" && --depth === 0) {
+      groupEnd = i;
+      break;
+    }
+  }
+  if (groupEnd === -1) return undefined;
+
+  const conditions = parseSubRules(t.slice(groupStart + 1, groupEnd));
+  if (conditions.length === 0) return undefined;
+  const rest = t
+    .slice(groupEnd + 1)
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const policy = rest[0];
+  if (!policy) return undefined;
+  return { operator, conditions, policy, options: rest.slice(1) };
+}
+
+/** Extract top-level `(type,value)` sub-rules from a logical group's body. */
+function parseSubRules(inner: string): LogicalSubRule[] {
+  const subs: LogicalSubRule[] = [];
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] === "(") {
+      if (depth === 0) start = i + 1;
+      depth++;
+    } else if (inner[i] === ")") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        const body = inner.slice(start, i);
+        const comma = body.indexOf(",");
+        subs.push(
+          comma === -1
+            ? { type: body.trim(), value: "" }
+            : { type: body.slice(0, comma).trim(), value: body.slice(comma + 1).trim() },
+        );
+        start = -1;
+      }
+    }
+  }
+  return subs.filter((s) => s.type);
+}
+
+/** Serialize a {@link LogicalRule} back into a rule line. */
+export function serializeLogicalRule(rule: LogicalRule): string {
+  const group = rule.conditions
+    .map((c) => `(${[c.type.trim(), c.value.trim()].filter((p) => p).join(",")})`)
+    .join(",");
+  const parts = [rule.operator.trim(), `(${group})`, rule.policy.trim()];
   for (const opt of rule.options) {
     if (opt.trim()) parts.push(opt.trim());
   }

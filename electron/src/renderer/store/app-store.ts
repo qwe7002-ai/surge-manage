@@ -102,6 +102,8 @@ interface AppState {
   readProfileRules: (profile: string) => Promise<RuleEntry[]>;
   /** Replace the [Rule] section from rule entries (disabled → `#`), reload. */
   writeProfileRules: (profile: string, entries: RuleEntry[]) => Promise<void>;
+  /** Overwrite a profile's entire config file (validated), then reload. */
+  writeProfileRaw: (profile: string, content: string) => Promise<void>;
   testPolicy: (name: string) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
@@ -413,6 +415,15 @@ export const useApp = create<AppState>((set, get) => ({
       await window.surge.profiles.write(profile, serializeConfigDocument(next));
       await window.surge.surge.run("reload");
       set({ lastInfo: `Saved Rule to ${profile}.conf and reloaded` });
+    });
+  },
+
+  async writeProfileRaw(profile, content) {
+    await guarded(set, async () => {
+      // profiles.write validates with `surge --check` and keeps a .bak backup.
+      await window.surge.profiles.write(profile, content);
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved ${profile}.conf and reloaded` });
     });
   },
 

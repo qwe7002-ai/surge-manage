@@ -34,9 +34,13 @@ import {
 } from "../dist/proxy.js";
 import { parseInterfaces } from "../dist/parsers.js";
 import {
+  LOGICAL_RULE_TYPES,
+  RULE_TYPES,
   isLogicalRuleType,
+  parseLogicalRule,
   parseRuleLine,
   ruleTypeHasValue,
+  serializeLogicalRule,
   serializeRuleLine,
 } from "../dist/rule.js";
 import type { SurgeProfile } from "../dist/types.js";
@@ -449,4 +453,31 @@ test("parseRuleLine declines logical and malformed rules (raw fallback)", () => 
   assert.equal(parseRuleLine("DOMAIN-SUFFIX,example.com"), undefined); // no policy
   assert.equal(ruleTypeHasValue("FINAL"), false);
   assert.equal(ruleTypeHasValue("DOMAIN"), true);
+});
+
+test("RULE_TYPES excludes logical combinators", () => {
+  assert.ok(!RULE_TYPES.includes("AND"));
+  assert.ok(!RULE_TYPES.includes("OR"));
+  assert.ok(!RULE_TYPES.includes("NOT"));
+  assert.deepEqual([...LOGICAL_RULE_TYPES], ["AND", "OR", "NOT"]);
+});
+
+test("parseLogicalRule reads operator, conditions, policy and round-trips", () => {
+  const r = parseLogicalRule("AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy")!;
+  assert.equal(r.operator, "AND");
+  assert.deepEqual(r.conditions, [
+    { type: "DOMAIN", value: "a.com" },
+    { type: "DEST-PORT", value: "80" },
+  ]);
+  assert.equal(r.policy, "Proxy");
+  assert.equal(serializeLogicalRule(r), "AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy");
+
+  const not = parseLogicalRule("NOT,((DOMAIN-SUFFIX,cn)),DIRECT")!;
+  assert.equal(not.operator, "NOT");
+  assert.equal(not.conditions.length, 1);
+  assert.equal(serializeLogicalRule(not), "NOT,((DOMAIN-SUFFIX,cn)),DIRECT");
+
+  // Non-logical and malformed lines decline.
+  assert.equal(parseLogicalRule("DOMAIN,a.com,Proxy"), undefined);
+  assert.equal(parseLogicalRule("AND,((DOMAIN,a.com))"), undefined); // no policy
 });

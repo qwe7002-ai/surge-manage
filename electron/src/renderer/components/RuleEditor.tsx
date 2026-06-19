@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Power, RefreshCw, Save, Trash2 } from "lucide-react";
+import { GripVertical, Pencil, Plus, Power, RefreshCw, Save, Trash2 } from "lucide-react";
 import {
   BUILTIN_POLICIES,
+  LOGICAL_RULE_TYPES,
   RULE_OPTIONS,
   RULE_TYPES,
+  type LogicalSubRule,
   type RuleEntry,
+  parseLogicalRule,
   parseRuleLine,
   ruleTypeHasValue,
+  serializeLogicalRule,
   serializeRuleLine,
 } from "@surge-manage/shared";
 import { Button } from "@/components/ui/button";
@@ -29,7 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/store/app-store";
+
+/** Matcher types usable as a logical sub-condition (every type but FINAL). */
+const MATCHER_TYPES = RULE_TYPES.filter((t) => t !== "FINAL");
 
 interface EditorState {
   /** Index being edited, or null when adding a new rule. */
@@ -38,11 +46,11 @@ interface EditorState {
 }
 
 /**
- * Editor for the active profile's `[Rule]` section. Rules render as readable
- * rows (type → value → policy) with an enable/disable switch and a right-click
- * menu for edit/delete; new and existing rules are edited in a structured
- * dialog (with a raw fallback for logical/complex rules). `#`-disabled rules
- * and plain comments are preserved across a save.
+ * Editor for the active profile's `[Rule]` section. Rules render as readable,
+ * drag-reorderable rows (type → value → policy) with an enable/disable switch
+ * and a right-click menu for edit/delete; new and existing rules are edited in
+ * a dialog with Single / Logical / Raw tabs. `#`-disabled rules and plain
+ * comments are preserved across a save.
  */
 export function RuleEditor() {
   const profiles = useApp((s) => s.profiles);
@@ -59,6 +67,7 @@ export function RuleEditor() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   // Built-in targets plus every defined proxy and policy group.
   const policies = useMemo(() => {
@@ -109,6 +118,17 @@ export function RuleEditor() {
   }
   function remove(i: number) {
     setEntries((es) => es.filter((_, idx) => idx !== i));
+    setDirty(true);
+  }
+  /** Move the rule at `from` to `to`, preserving the rest of the order. */
+  function move(from: number, to: number) {
+    if (from === to) return;
+    setEntries((es) => {
+      const next = [...es];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved!);
+      return next;
+    });
     setDirty(true);
   }
   function saveEditor(text: string) {
@@ -182,8 +202,8 @@ export function RuleEditor() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Right-click a rule to edit, enable/disable, or delete it. Disabled rules and
-        comments are kept as <code>#</code> lines and survive a save.
+        Drag the handle to reorder. Right-click a rule to edit, enable/disable, or delete it.
+        Disabled rules and comments are kept as <code>#</code> lines and survive a save.
       </p>
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -200,6 +220,13 @@ export function RuleEditor() {
           <RuleRow
             key={i}
             entry={e}
+            dragging={dragIndex === i}
+            onDragStart={() => setDragIndex(i)}
+            onDragEnd={() => setDragIndex(null)}
+            onDropOver={() => {
+              if (dragIndex !== null) move(dragIndex, i);
+              setDragIndex(i);
+            }}
             onContextMenu={(ev) => {
               ev.preventDefault();
               setMenu({ index: i, x: ev.clientX, y: ev.clientY });
@@ -244,21 +271,50 @@ export function RuleEditor() {
 
 function RuleRow({
   entry,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDropOver,
   onContextMenu,
   onToggle,
   onEdit,
 }: {
   entry: RuleEntry;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOver: () => void;
   onContextMenu: React.MouseEventHandler;
   onToggle: () => void;
   onEdit: () => void;
 }) {
+  const dragProps = {
+    draggable: true,
+    onDragStart,
+    onDragEnd,
+    onDragOver: (ev: React.DragEvent) => {
+      ev.preventDefault();
+      onDropOver();
+    },
+  };
+  const handle = (
+    <span
+      className="shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+      title="Drag to reorder"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </span>
+  );
+  const dragClass = dragging ? "opacity-40" : "";
+
   if (entry.comment) {
     return (
       <div
-        className="flex items-center gap-2 rounded px-2 py-1 text-xs text-muted-foreground"
+        {...dragProps}
+        className={`flex items-center gap-2 rounded px-2 py-1 text-xs text-muted-foreground ${dragClass}`}
         onContextMenu={onContextMenu}
       >
+        {handle}
         <span className="font-mono">#</span>
         <span className="truncate italic">{entry.text}</span>
       </div>
@@ -266,14 +322,17 @@ function RuleRow({
   }
 
   const rule = parseRuleLine(entry.text);
+  const logical = rule ? undefined : parseLogicalRule(entry.text);
   const dim = entry.enabled ? "" : "opacity-50";
   return (
     <div
-      className="flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors hover:bg-accent"
+      {...dragProps}
+      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors hover:bg-accent ${dragClass}`}
       onContextMenu={onContextMenu}
       onDoubleClick={onEdit}
-      title="Right-click for options"
+      title="Drag to reorder · right-click for options"
     >
+      {handle}
       <Switch
         checked={entry.enabled}
         onCheckedChange={onToggle}
@@ -298,6 +357,17 @@ function RuleRow({
               {o}
             </Badge>
           ))}
+        </div>
+      ) : logical ? (
+        <div className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm ${dim}`}>
+          <Badge className="shrink-0 text-[10px] font-medium">{logical.operator}</Badge>
+          <span className="truncate font-mono text-xs" title={entry.text}>
+            {logical.conditions.map((c) => `${c.type},${c.value}`).join(" · ")}
+          </span>
+          <span className="text-muted-foreground">→</span>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
+            {logical.policy}
+          </Badge>
         </div>
       ) : (
         <code className={`min-w-0 flex-1 truncate text-xs ${dim}`} title={entry.text}>
@@ -375,6 +445,8 @@ function MenuItem({
 /** Sentinel for select options whose underlying value is the empty string. */
 const NONE = "__none__";
 
+type DialogTab = "single" | "logical" | "raw";
+
 function RuleDialog({
   state,
   policies,
@@ -386,33 +458,51 @@ function RuleDialog({
   onCancel: () => void;
   onSave: (text: string) => void;
 }) {
-  const parsed = parseRuleLine(state.text);
-  const [type, setType] = useState(parsed?.type ?? "DOMAIN-SUFFIX");
-  const [value, setValue] = useState(parsed?.value ?? "");
-  const [policy, setPolicy] = useState(parsed?.policy ?? "");
-  const [options, setOptions] = useState<string[]>(parsed?.options ?? []);
-  // Lines we can't structure (logical/complex) start in raw mode.
-  const [rawMode, setRawMode] = useState(!!state.text.trim() && !parsed);
+  const single = parseRuleLine(state.text);
+  const logical = parseLogicalRule(state.text);
+  const adding = state.index == null;
+
+  const [tab, setTab] = useState<DialogTab>(
+    logical ? "logical" : single || !state.text.trim() ? "single" : "raw",
+  );
+
+  // Single-matcher state.
+  const [type, setType] = useState(single?.type ?? "DOMAIN-SUFFIX");
+  const [value, setValue] = useState(single?.value ?? "");
+  const [policy, setPolicy] = useState(single?.policy ?? "");
+  const [options, setOptions] = useState<string[]>(single?.options ?? []);
+
+  // Logical-rule state.
+  const [operator, setOperator] = useState(logical?.operator ?? "AND");
+  const [conditions, setConditions] = useState<LogicalSubRule[]>(
+    logical?.conditions ?? [{ type: "DOMAIN-SUFFIX", value: "" }],
+  );
+  const [logicPolicy, setLogicPolicy] = useState(logical?.policy ?? "");
+
+  // Raw state.
   const [rawText, setRawText] = useState(state.text);
 
-  const adding = state.index == null;
   const hasValue = ruleTypeHasValue(type);
-  const typeOptions = RULE_TYPES.includes(type as (typeof RULE_TYPES)[number])
-    ? RULE_TYPES
-    : [type, ...RULE_TYPES];
-  const policyOptions =
-    policy && !policies.includes(policy) ? [policy, ...policies] : policies;
-  // Surface known flags plus any unknown ones already on the rule.
   const optionChoices = Array.from(new Set([...RULE_OPTIONS, ...options]));
 
-  const preview = rawMode
-    ? rawText.trim()
-    : serializeRuleLine({ type, value, policy, options });
-  const canSave = rawMode ? !!rawText.trim() : !!type && !!policy && (!hasValue || !!value);
+  const text =
+    tab === "single"
+      ? serializeRuleLine({ type, value, policy, options })
+      : tab === "logical"
+        ? serializeLogicalRule({
+            operator,
+            conditions: conditions.filter((c) => c.type && c.value),
+            policy: logicPolicy,
+            options: [],
+          })
+        : rawText.trim();
 
-  function toggleOption(opt: string, on: boolean) {
-    setOptions((os) => (on ? [...os, opt] : os.filter((o) => o !== opt)));
-  }
+  const canSave =
+    tab === "single"
+      ? !!type && !!policy && (!hasValue || !!value)
+      : tab === "logical"
+        ? !!logicPolicy && conditions.some((c) => c.type && c.value)
+        : !!rawText.trim();
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
@@ -424,39 +514,14 @@ function RuleDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center justify-end gap-2">
-          <Label htmlFor="rule-raw" className="text-xs text-muted-foreground">
-            Raw
-          </Label>
-          <Switch
-            id="rule-raw"
-            checked={rawMode}
-            onCheckedChange={(toRaw) => {
-              if (toRaw) setRawText(serializeRuleLine({ type, value, policy, options }));
-              else {
-                const p = parseRuleLine(rawText);
-                if (p) {
-                  setType(p.type);
-                  setValue(p.value);
-                  setPolicy(p.policy);
-                  setOptions(p.options);
-                }
-              }
-              setRawMode(toRaw);
-            }}
-          />
-        </div>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as DialogTab)}>
+          <TabsList>
+            <TabsTrigger value="single">Single</TabsTrigger>
+            <TabsTrigger value="logical">Logical</TabsTrigger>
+            <TabsTrigger value="raw">Raw</TabsTrigger>
+          </TabsList>
 
-        {rawMode ? (
-          <Input
-            autoFocus
-            value={rawText}
-            className="font-mono text-xs"
-            placeholder="AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy"
-            onChange={(e) => setRawText(e.target.value)}
-          />
-        ) : (
-          <div className="space-y-4">
+          <TabsContent value="single" className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Type</Label>
@@ -465,7 +530,10 @@ function RuleDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    {typeOptions.map((t) => (
+                    {(RULE_TYPES.includes(type as (typeof RULE_TYPES)[number])
+                      ? RULE_TYPES
+                      : [type, ...RULE_TYPES]
+                    ).map((t) => (
                       <SelectItem key={t} value={t}>
                         {t}
                       </SelectItem>
@@ -473,24 +541,7 @@ function RuleDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Policy</Label>
-                <Select
-                  value={policy === "" ? NONE : policy}
-                  onValueChange={(v) => setPolicy(v === NONE ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="select…" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    {policyOptions.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <PolicySelect label="Policy" value={policy} policies={policies} onChange={setPolicy} />
             </div>
 
             {hasValue && (
@@ -513,30 +564,159 @@ function RuleDialog({
                   <label key={opt} className="flex items-center gap-1.5 text-xs">
                     <Switch
                       checked={options.includes(opt)}
-                      onCheckedChange={(on) => toggleOption(opt, on)}
+                      onCheckedChange={(on) =>
+                        setOptions((os) => (on ? [...os, opt] : os.filter((o) => o !== opt)))
+                      }
                     />
                     <span className="font-mono">{opt}</span>
                   </label>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          </TabsContent>
 
-        <p className="truncate rounded bg-muted px-2 py-1 font-mono text-xs" title={preview}>
-          {preview || "—"}
+          <TabsContent value="logical" className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Operator</Label>
+                <Select value={operator} onValueChange={setOperator}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOGICAL_RULE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <PolicySelect
+                label="Policy"
+                value={logicPolicy}
+                policies={policies}
+                onChange={setLogicPolicy}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Conditions</Label>
+              <div className="space-y-1.5">
+                {conditions.map((c, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <Select
+                      value={c.type}
+                      onValueChange={(v) =>
+                        setConditions((cs) =>
+                          cs.map((x, idx) => (idx === i ? { ...x, type: v } : x)),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {MATCHER_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={c.value}
+                      placeholder="value"
+                      className="h-8 flex-1 font-mono text-xs"
+                      onChange={(e) =>
+                        setConditions((cs) =>
+                          cs.map((x, idx) => (idx === i ? { ...x, value: e.target.value } : x)),
+                        )
+                      }
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0 text-destructive"
+                      title="Remove condition"
+                      disabled={conditions.length === 1}
+                      onClick={() =>
+                        setConditions((cs) => cs.filter((_, idx) => idx !== i))
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setConditions((cs) => [...cs, { type: "DOMAIN-SUFFIX", value: "" }])
+                  }
+                >
+                  <Plus /> Add condition
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="raw">
+            <Input
+              autoFocus
+              value={rawText}
+              className="font-mono text-xs"
+              placeholder="AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy"
+              onChange={(e) => setRawText(e.target.value)}
+            />
+          </TabsContent>
+        </Tabs>
+
+        <p className="truncate rounded bg-muted px-2 py-1 font-mono text-xs" title={text}>
+          {text || "—"}
         </p>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button disabled={!canSave} onClick={() => onSave(preview)}>
+          <Button disabled={!canSave} onClick={() => onSave(text)}>
             {adding ? "Add" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PolicySelect({
+  label,
+  value,
+  policies,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  policies: string[];
+  onChange: (v: string) => void;
+}) {
+  const options = value && !policies.includes(value) ? [value, ...policies] : policies;
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Select value={value === "" ? NONE : value} onValueChange={(v) => onChange(v === NONE ? "" : v)}>
+        <SelectTrigger>
+          <SelectValue placeholder="select…" />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {options.map((p) => (
+            <SelectItem key={p} value={p}>
+              {p}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
