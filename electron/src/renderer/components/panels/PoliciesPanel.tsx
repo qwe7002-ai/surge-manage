@@ -305,6 +305,7 @@ export function PoliciesPanel() {
             <ProxyEditor
               key={`${proxyEditor.profile}:${proxyEditor.name}`}
               initialLine={proxyEditor.line}
+              policies={allPolicies.filter((p) => p !== proxyEditor.name)}
               onChange={(line) =>
                 setProxyEditor((current) => (current ? { ...current, line } : current))
               }

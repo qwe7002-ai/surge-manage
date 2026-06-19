@@ -78,8 +78,11 @@ export function protocolUsesServer(type: string): boolean {
   return SERVER_PROTOCOLS.has(type.toLowerCase());
 }
 
-/** The widget a known parameter should be edited with. */
-export type ProxyFieldKind = "text" | "password" | "toggle" | "select";
+/**
+ * The widget a known parameter should be edited with. `policy` is a select
+ * populated at render time with the available proxies and policy groups.
+ */
+export type ProxyFieldKind = "text" | "password" | "toggle" | "select" | "policy";
 
 /** UI metadata for a known proxy parameter. */
 export interface ProxyFieldSpec {
@@ -93,6 +96,12 @@ export interface ProxyFieldSpec {
   options?: { value: string; label: string }[];
   /** Placeholder for text inputs. */
   placeholder?: string;
+  /**
+   * Surge's implicit value when the parameter is absent. An explicit value
+   * equal to this is treated the same as absence, so e.g. `block-quic=auto`
+   * and a missing `block-quic` both render as "Auto".
+   */
+  defaultValue?: string;
 }
 
 /**
@@ -146,8 +155,8 @@ const FIELD_SPECS: Record<string, ProxyFieldSpec> = {
   "underlying-proxy": {
     key: "underlying-proxy",
     label: "Underlying Proxy",
-    kind: "text",
-    hint: "Connection to a remote host will be performed sequentially from one proxy server to another.",
+    kind: "policy",
+    hint: "Connection to a remote host will be performed sequentially from one proxy server to another. Any proxy or policy group may be chosen.",
     placeholder: "Not Use",
   },
   "test-url": {
@@ -169,8 +178,10 @@ const FIELD_SPECS: Record<string, ProxyFieldSpec> = {
     label: "Block QUIC",
     kind: "select",
     hint: "Forwarding QUIC traffic through a proxy may cause performance issues. Blocking it falls clients back to traditional HTTPS/TCP.",
+    // Surge defaults to Auto when block-quic is undefined, so Auto == absence.
+    defaultValue: "auto",
     options: [
-      { value: "auto", label: "Auto" },
+      { value: "", label: "Auto" },
       { value: "on", label: "On" },
       { value: "off", label: "Off" },
     ],

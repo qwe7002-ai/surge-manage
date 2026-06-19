@@ -389,3 +389,14 @@ test("proxyFieldsFor returns protocol-specific fields before common ones", () =>
   // Unknown protocols still get the common set.
   assert.ok(proxyFieldsFor("mystery").some((f) => f.key === "test-url"));
 });
+
+test("block-quic defaults to Auto (absence) and underlying-proxy is a policy select", () => {
+  const fields = proxyFieldsFor("ss");
+  const blockQuic = fields.find((f) => f.key === "block-quic")!;
+  assert.equal(blockQuic.defaultValue, "auto");
+  // The Auto option carries the empty value so absence == auto.
+  assert.equal(blockQuic.options![0]!.value, "");
+  assert.equal(blockQuic.options![0]!.label, "Auto");
+  const underlying = fields.find((f) => f.key === "underlying-proxy")!;
+  assert.equal(underlying.kind, "policy");
+});

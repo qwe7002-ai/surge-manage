@@ -35,9 +35,12 @@ const EMPTY = "__empty__";
  */
 export function ProxyEditor({
   initialLine,
+  policies = [],
   onChange,
 }: {
   initialLine: string;
+  /** All proxies and policy groups, offered as underlying-proxy choices. */
+  policies?: string[];
   onChange: (line: string) => void;
 }) {
   const parsedInitial = parseProxyLine(initialLine);
@@ -112,6 +115,7 @@ export function ProxyEditor({
         <FormBody
           config={config}
           fields={fields}
+          policies={policies}
           extraParams={extraParams}
           onName={(name) => update({ ...config, name })}
           onType={(type) => update({ ...config, type })}
@@ -145,6 +149,7 @@ export function ProxyEditor({
 function FormBody({
   config,
   fields,
+  policies,
   extraParams,
   onName,
   onType,
@@ -158,6 +163,7 @@ function FormBody({
 }: {
   config: ProxyConfig;
   fields: ProxyFieldSpec[];
+  policies: string[];
   extraParams: { key: string; value: string; i: number }[];
   onName: (v: string) => void;
   onType: (v: string) => void;
@@ -229,6 +235,7 @@ function FormBody({
             key={spec.key}
             spec={spec}
             value={getProxyParam(config, spec.key) ?? ""}
+            policies={policies}
             onChange={(v) => onParam(spec.key, v)}
           />
         ))}
@@ -281,12 +288,39 @@ function FormBody({
 function ParamField({
   spec,
   value,
+  policies,
   onChange,
 }: {
   spec: ProxyFieldSpec;
   value: string;
+  policies: string[];
   onChange: (v: string) => void;
 }) {
+  if (spec.kind === "policy") {
+    // "Not Use" (empty) plus every proxy/group; keep an unknown current value.
+    const options = value && !policies.includes(value) ? [value, ...policies] : policies;
+    return (
+      <Field label={spec.label} hint={spec.hint}>
+        <Select
+          value={value === "" ? EMPTY : value}
+          onValueChange={(v) => onChange(v === EMPTY ? "" : v)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={spec.placeholder ?? "Not Use"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={EMPTY}>{spec.placeholder ?? "Not Use"}</SelectItem>
+            {options.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+
   if (spec.kind === "toggle") {
     const on = value === "true" || value === "1";
     return (
@@ -306,10 +340,13 @@ function ParamField({
   }
 
   if (spec.kind === "select" && spec.options) {
+    // An explicit value equal to Surge's implicit default collapses to absence,
+    // so e.g. block-quic=auto renders as the empty "Auto" option.
+    const normalized = spec.defaultValue && value === spec.defaultValue ? "" : value;
     return (
       <Field label={spec.label} hint={spec.hint}>
         <Select
-          value={value === "" ? EMPTY : value}
+          value={normalized === "" ? EMPTY : normalized}
           onValueChange={(v) => onChange(v === EMPTY ? "" : v)}
         >
           <SelectTrigger>
