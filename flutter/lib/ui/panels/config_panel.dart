@@ -62,7 +62,7 @@ class _RawConfig extends StatefulWidget {
 }
 
 class _RawConfigState extends State<_RawConfig> {
-  bool _effective = true;
+  bool _effective = false;
   String _content = '';
   bool _loading = false;
   String? _error;
@@ -79,12 +79,19 @@ class _RawConfigState extends State<_RawConfig> {
       _error = null;
     });
     try {
-      final action = _effective
-          ? SurgeAction.dumpProfileEffective
-          : SurgeAction.dumpProfileOriginal;
-      final r = await context.read<AppState>().runConfig(action);
+      final state = context.read<AppState>();
+      var text = _effective
+          ? (await state.runConfig(SurgeAction.dumpProfileEffective)).stdout
+          : (state.activeProfile == null
+              ? ''
+              : await state.readProfileText(state.activeProfile!));
+      final trimmed = text.trim();
+      if (_effective &&
+          (trimmed == '(null)' || trimmed.endsWith('(null)'))) {
+        text = 'Effective profile is not available from this Surge CLI context.';
+      }
       if (!mounted) return;
-      setState(() => _content = r.stdout);
+      setState(() => _content = text);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {

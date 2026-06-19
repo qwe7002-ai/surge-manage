@@ -130,5 +130,7 @@ async function buildConnectConfig(host: HostConfig): Promise<ConnectConfig> {
       if (!agent) throw new Error("SSH_AUTH_SOCK not set; agent auth unavailable");
       return { ...base, agent };
     }
+    case "local":
+      throw new Error("Local debug hosts do not use SSH");
   }
 }

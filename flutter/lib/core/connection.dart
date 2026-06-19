@@ -51,25 +51,63 @@ class ConnectionManager {
   Future<List<String>> listProfiles() async {
     final client = _client;
     if (client == null) throw StateError('Not connected');
-    final dir = (_host.configDir?.trim().isNotEmpty ?? false)
-        ? _host.configDir!.trim()
-        : kDefaultConfigDir;
+    final dir = await _profileDir();
     final res = await exec(client, buildListProfilesCommand(dir));
     return parseProfiles(res.stdout);
   }
 
   /// Read a profile config file from the remote host over SFTP.
-  Future<String> readProfile(String path) async {
+  Future<String> readProfile(String profile) async {
     final client = _client;
     if (client == null) throw StateError('Not connected');
-    return readRemoteFile(client, await _resolvePath(path));
+    return readRemoteFile(client, await _profilePath(profile));
   }
 
   /// Write a profile config file to the remote host over SFTP.
-  Future<void> writeProfile(String path, String content) async {
+  Future<void> writeProfile(String profile, String content) async {
     final client = _client;
     if (client == null) throw StateError('Not connected');
-    await writeRemoteFile(client, await _resolvePath(path), content);
+    final path = await _profilePath(profile);
+    final tmp =
+        '$path.surge-manage-${DateTime.now().millisecondsSinceEpoch}.tmp';
+    final backup = '$path.bak';
+    try {
+      await writeRemoteFile(client, tmp, content);
+      final check = await exec(
+        client,
+        buildCommandLine(_host.surge, SurgeAction.checkProfile, [tmp]),
+      );
+      if (check.code != 0) {
+        throw StateError(
+          (check.stdout.isNotEmpty ? check.stdout : check.stderr).trim(),
+        );
+      }
+      final swap =
+          'cp -p -- ${shellQuote(path)} ${shellQuote(backup)} && mv -f -- ${shellQuote(tmp)} ${shellQuote(path)}';
+      final moved = await exec(client, swap);
+      if (moved.code != 0) {
+        throw StateError(
+          (moved.stderr.isNotEmpty ? moved.stderr : moved.stdout).trim(),
+        );
+      }
+    } catch (_) {
+      await exec(client, 'rm -f -- ${shellQuote(tmp)}').catchError((_) {});
+      rethrow;
+    }
+  }
+
+  Future<String> _profilePath(String profile) async {
+    final name = _validateProfileName(profile);
+    final profiles = await listProfiles();
+    if (!profiles.contains(name)) throw ArgumentError('Unknown profile: $name');
+    return '${await _profileDir()}/$name.conf';
+  }
+
+  Future<String> _profileDir() async {
+    final dir = (_host.configDir?.trim().isNotEmpty ?? false)
+        ? _host.configDir!.trim()
+        : kDefaultConfigDir;
+    return (await _resolvePath(dir)).replaceFirst(RegExp(r'/+$'), '');
   }
 
   /// Expand a leading `~` to the remote $HOME (SFTP does not expand it).
@@ -140,4 +178,18 @@ class ConnectionManager {
     await _state.close();
     await _logController.close();
   }
+}
+
+String _validateProfileName(String profile) {
+  final name = profile.trim();
+  if (name.isEmpty ||
+      name == '.' ||
+      name == '..' ||
+      name.endsWith('.conf') ||
+      name.contains('/') ||
+      name.contains('\\') ||
+      name.contains('\u0000')) {
+    throw ArgumentError('Invalid profile name: $profile');
+  }
+  return name;
 }

@@ -36,10 +36,10 @@ const bridge: SurgeBridge = {
   },
   profiles: {
     list: (): Promise<string[]> => ipcRenderer.invoke(IPC.profilesList),
-    read: (path: string): Promise<string> =>
-      ipcRenderer.invoke(IPC.profileRead, path),
-    write: (path: string, content: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.profileWrite, path, content),
+    read: (profile: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.profileRead, profile),
+    write: (profile: string, content: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.profileWrite, profile, content),
   },
   logs: {
     start: () => ipcRenderer.invoke(IPC.logsStart),

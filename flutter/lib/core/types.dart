@@ -22,6 +22,7 @@ enum SurgeAction {
   dumpEvent,
   dumpVirtualIpDb,
   dumpTempRule,
+  dumpSmartGroupInfo,
   dumpProfileEffective,
   dumpProfileOriginal,
   watchRequest,
@@ -190,6 +191,8 @@ class Environment {
   const Environment({
     this.fields = const {},
     this.selection = const {},
+    this.autoOverride = const {},
+    this.globalPolicy,
     this.proxyMode,
     this.raw,
   });
@@ -197,6 +200,12 @@ class Environment {
 
   /// ProxyGroupSelection: select-group name → currently selected policy.
   final Map<String, String> selection;
+
+  /// AutoPolicyGroupOverride: auto-group name → pinned policy override.
+  final Map<String, String> autoOverride;
+
+  /// AllProxyModePolicyNameKey: selected policy used when ProxyMode is Global.
+  final String? globalPolicy;
 
   /// ProxyMode: 0 = Direct, 1 = Global, 2 = Rule.
   final int? proxyMode;
@@ -222,9 +231,14 @@ bool isToggleOn(String? value) => value == '1' || value == 'true';
 
 /// From `surge --raw dump policy` → names of proxies and policy groups.
 class PolicyDump {
-  const PolicyDump({this.proxies = const [], this.groups = const []});
+  const PolicyDump({
+    this.proxies = const [],
+    this.groups = const [],
+    this.groupTypes = const {},
+  });
   final List<String> proxies;
   final List<String> groups;
+  final Map<String, String> groupTypes;
 }
 
 /// One proxy's result from `test-all-policies` / `test-policy` / `test-group`.

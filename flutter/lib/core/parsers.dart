@@ -44,6 +44,8 @@ Environment parseEnvironment(String stdout) {
   final json = _tryJson(stdout);
   final fields = <String, String>{};
   final selection = <String, String>{};
+  final autoOverride = <String, String>{};
+  String? globalPolicy;
   int? proxyMode;
 
   final env = json is Map ? _unwrap(json, 'environment') : null;
@@ -57,8 +59,18 @@ Environment parseEnvironment(String stdout) {
         });
         return;
       }
+      if (k == 'AutoPolicyGroupOverride' && v is Map) {
+        v.forEach((g, p) {
+          final name = _str(p);
+          if (name != null) autoOverride['$g'] = name;
+        });
+        return;
+      }
       if (k == 'ProxyMode') {
         proxyMode = _num(v)?.toInt() ?? int.tryParse('$v');
+      }
+      if (k == 'AllProxyModePolicyNameKey') {
+        globalPolicy = _str(v);
       }
       fields['$k'] = v is Map || v is List ? jsonEncode(v) : '$v';
     });
@@ -66,6 +78,8 @@ Environment parseEnvironment(String stdout) {
   return Environment(
     fields: fields,
     selection: selection,
+    autoOverride: autoOverride,
+    globalPolicy: globalPolicy,
     proxyMode: proxyMode,
     raw: json ?? stdout,
   );
@@ -88,8 +102,17 @@ Map<String, List<String>> parseSubPolicies(String stdout) {
   return out;
 }
 
-List<String> _names(dynamic v) =>
-    v is List ? v.map((m) => '$m').toList() : const [];
+String? _nameOf(dynamic v) {
+  if (v is String) return v;
+  if (v is Map) {
+    return _str(v['name']) ?? _str(v['key']) ?? _str(v['url']) ?? _str(v['path']);
+  }
+  return null;
+}
+
+List<String> _names(dynamic v) => v is List
+    ? v.map(_nameOf).whereType<String>().toList()
+    : const [];
 
 /// `surge --raw dump policy` → {"proxies":[...],"policy-groups":[...]}
 PolicyDump parsePolicies(String stdout) {
@@ -101,6 +124,18 @@ PolicyDump parsePolicies(String stdout) {
     );
   }
   return const PolicyDump();
+}
+
+/// `surge --raw dump smart-group-info` → smart group names keyed by group.
+Map<String, String> parseSmartGroupTypes(String stdout) {
+  final json = _tryJson(stdout);
+  if (json is! Map) return const {};
+  final out = <String, String>{};
+  json.forEach((name, value) {
+    if (name == 'report') return;
+    if (value is Map) out['$name'] = 'smart';
+  });
+  return out;
 }
 
 /// `surge --raw test-all-policies` → {"UK":{"tcp":66,"receive":415,...}, ...}

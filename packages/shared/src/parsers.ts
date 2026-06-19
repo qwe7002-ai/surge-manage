@@ -76,6 +76,8 @@ export function parseEnvironment(stdout: string): Environment {
   const json = tryJson(stdout);
   const fields: Record<string, string> = {};
   const selection: Record<string, string> = {};
+  const autoOverride: Record<string, string> = {};
+  let globalPolicy: string | undefined;
   let proxyMode: number | undefined;
 
   const outer = asRecord(json);
@@ -93,14 +95,27 @@ export function parseEnvironment(stdout: string): Environment {
         }
         continue;
       }
+      if (k === "AutoPolicyGroupOverride") {
+        const overrides = asRecord(v);
+        if (overrides) {
+          for (const [g, p] of Object.entries(overrides)) {
+            const name = str(p);
+            if (name) autoOverride[g] = name;
+          }
+        }
+        continue;
+      }
       if (k === "ProxyMode") {
         proxyMode = num(v) ?? Number(v);
         if (!Number.isFinite(proxyMode)) proxyMode = undefined;
       }
+      if (k === "AllProxyModePolicyNameKey") {
+        globalPolicy = str(v);
+      }
       fields[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
     }
   }
-  return { fields, selection, proxyMode, raw: json ?? stdout };
+  return { fields, selection, autoOverride, globalPolicy, proxyMode, raw: json ?? stdout };
 }
 
 function nameOf(v: unknown): string | undefined {
@@ -125,6 +140,18 @@ export function parsePolicies(stdout: string): PolicyDump {
     proxies: toNames(rec?.proxies),
     groups: toNames(rec?.["policy-groups"] ?? rec?.policyGroups ?? rec?.groups),
   };
+}
+
+/** `surge --raw dump smart-group-info` → smart group names keyed by group. */
+export function parseSmartGroupTypes(stdout: string): Record<string, string> {
+  const rec = asRecord(tryJson(stdout));
+  const out: Record<string, string> = {};
+  if (!rec) return out;
+  for (const [name, value] of Object.entries(rec)) {
+    if (name === "report") continue;
+    if (asRecord(value)) out[name] = "smart";
+  }
+  return out;
 }
 
 /**

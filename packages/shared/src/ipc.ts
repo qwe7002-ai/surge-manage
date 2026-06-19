@@ -51,10 +51,10 @@ export interface SurgeBridge {
   profiles: {
     /** List `*.conf` profile names in the host's configured config directory. */
     list(): Promise<string[]>;
-    /** Read a profile config file (absolute remote path) over SFTP. */
-    read(path: string): Promise<string>;
-    /** Overwrite a profile config file (absolute remote path) over SFTP. */
-    write(path: string, content: string): Promise<void>;
+    /** Read a named profile config file over SFTP. */
+    read(profile: string): Promise<string>;
+    /** Validate and atomically overwrite a named profile config file over SFTP. */
+    write(profile: string, content: string): Promise<void>;
   };
   logs: {
     /** Begin streaming parsed surge log lines (e.g. when the Logs tab opens). */

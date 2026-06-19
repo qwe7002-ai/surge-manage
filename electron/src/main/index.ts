@@ -71,9 +71,11 @@ function registerIpc(): void {
   );
 
   ipcMain.handle(IPC.profilesList, () => connection.listProfiles());
-  ipcMain.handle(IPC.profileRead, (_e, path: string) => connection.readProfile(path));
-  ipcMain.handle(IPC.profileWrite, (_e, path: string, content: string) =>
-    connection.writeProfile(path, content),
+  ipcMain.handle(IPC.profileRead, (_e, profile: string) =>
+    connection.readProfile(profile),
+  );
+  ipcMain.handle(IPC.profileWrite, (_e, profile: string, content: string) =>
+    connection.writeProfile(profile, content),
   );
 
   ipcMain.handle(IPC.logsStart, () => connection.startLogs());

@@ -41,19 +41,32 @@ export function ConfigPanel() {
 
 /** Read-only viewer of the resolved/original profile. */
 function RawConfig() {
-  const [which, setWhich] = useState<Which>("effective");
+  const [which, setWhich] = useState<Which>("original");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeProfile = useApp((s) => s.activeProfile);
 
-  const load = useCallback(async (w: Which) => {
+  const load = useCallback(async (w: Which, profile: string | null) => {
     setLoading(true);
     setError(null);
     try {
-      const action: SurgeAction =
-        w === "effective" ? "dumpProfileEffective" : "dumpProfileOriginal";
-      const r = await window.surge.surge.run(action);
-      setContent(r.stdout);
+      if (w === "original") {
+        if (!profile) {
+          setContent("");
+          return;
+        }
+        setContent(await window.surge.profiles.read(profile));
+      } else {
+        const action: SurgeAction = "dumpProfileEffective";
+        const r = await window.surge.surge.run(action);
+        const text = r.stdout.trim();
+        setContent(
+          text === "(null)" || text.endsWith("(null)")
+            ? "Effective profile is not available from this Surge CLI context."
+            : r.stdout,
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -62,8 +75,8 @@ function RawConfig() {
   }, []);
 
   useEffect(() => {
-    void load(which);
-  }, [which, load]);
+    void load(which, activeProfile);
+  }, [which, activeProfile, load]);
 
   return (
     <div className="flex h-full flex-col space-y-3">
@@ -79,7 +92,7 @@ function RawConfig() {
           variant="ghost"
           className="ml-auto"
           disabled={loading}
-          onClick={() => void load(which)}
+          onClick={() => void load(which, activeProfile)}
         >
           <RefreshCw /> Refresh
         </Button>

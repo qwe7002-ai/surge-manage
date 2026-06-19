@@ -97,10 +97,10 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
 
       const host: HostConfig = {
         id,
-        label: form.label.trim() || form.host,
-        host: form.host.trim(),
-        port: Number(form.port) || 22,
-        username: form.username.trim(),
+        label: form.label.trim() || (form.auth === "local" ? "Local debug" : form.host),
+        host: form.auth === "local" ? "localhost" : form.host.trim(),
+        port: form.auth === "local" ? 0 : Number(form.port) || 22,
+        username: form.auth === "local" ? "local" : form.username.trim(),
         auth: form.auth,
         privateKeyPath: form.auth === "key" ? form.privateKeyPath.trim() || undefined : undefined,
         secretRef,
@@ -119,7 +119,8 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
     }
   }
 
-  const valid = form.host.trim() && form.username.trim();
+  const valid =
+    form.auth === "local" || (form.host.trim() && form.username.trim());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,7 +128,7 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
         <DialogHeader>
           <DialogTitle>{initial ? "Edit host" : "Add host"}</DialogTitle>
           <DialogDescription>
-            Surge Manage connects over SSH and runs the surge CLI on this host.
+            Surge Manage connects over SSH, or uses the local Surge CLI in debug mode.
           </DialogDescription>
         </DialogHeader>
 
@@ -135,30 +136,8 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
           <Field label="Label">
             <Input
               value={form.label}
-              placeholder="Tokyo node"
+              placeholder={form.auth === "local" ? "Local debug" : "Tokyo node"}
               onChange={(e) => set("label", e.target.value)}
-            />
-          </Field>
-          <div className="grid grid-cols-[1fr_88px] gap-2">
-            <Field label="Host">
-              <Input
-                value={form.host}
-                placeholder="203.0.113.7"
-                onChange={(e) => set("host", e.target.value)}
-              />
-            </Field>
-            <Field label="Port">
-              <Input
-                value={form.port}
-                inputMode="numeric"
-                onChange={(e) => set("port", e.target.value)}
-              />
-            </Field>
-          </div>
-          <Field label="Username">
-            <Input
-              value={form.username}
-              onChange={(e) => set("username", e.target.value)}
             />
           </Field>
           <Field label="Authentication">
@@ -170,12 +149,40 @@ export function HostDialog({ open, onOpenChange, initial }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="local">Local debug</SelectItem>
                 <SelectItem value="key">Private key</SelectItem>
                 <SelectItem value="password">Password</SelectItem>
                 <SelectItem value="agent">SSH agent</SelectItem>
               </SelectContent>
             </Select>
           </Field>
+
+          {form.auth !== "local" && (
+            <>
+              <div className="grid grid-cols-[1fr_88px] gap-2">
+                <Field label="Host">
+                  <Input
+                    value={form.host}
+                    placeholder="203.0.113.7"
+                    onChange={(e) => set("host", e.target.value)}
+                  />
+                </Field>
+                <Field label="Port">
+                  <Input
+                    value={form.port}
+                    inputMode="numeric"
+                    onChange={(e) => set("port", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field label="Username">
+                <Input
+                  value={form.username}
+                  onChange={(e) => set("username", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
 
           {form.auth === "key" && (
             <>

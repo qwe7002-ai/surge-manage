@@ -7,6 +7,8 @@ import '../../state/app_state.dart';
 import '../home_page.dart';
 import '../section_editor.dart';
 
+const _autoValue = '__auto__';
+
 class PoliciesPanel extends StatefulWidget {
   const PoliciesPanel({super.key});
 
@@ -32,6 +34,12 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
     final state = context.watch<AppState>();
     final proxies = state.policies?.proxies ?? const [];
     final groups = state.policies?.groups ?? const [];
+    final allPolicies = {...proxies, ...groups}.toList();
+    final globalPolicy = state.environment?.globalPolicy;
+    final policyOptions =
+        globalPolicy != null && !allPolicies.contains(globalPolicy)
+            ? [globalPolicy, ...allPolicies]
+            : allPolicies;
 
     return ListView(
       children: [
@@ -43,6 +51,22 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
                 style: const TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ),
+            if (policyOptions.isNotEmpty) ...[
+              const Text('Global',
+                  style: TextStyle(fontSize: 13, color: Colors.white54)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: globalPolicy,
+                hint: const Text('policy…'),
+                items: policyOptions
+                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                    .toList(),
+                onChanged: state.busy || state.environment?.proxyMode != 1
+                    ? null
+                    : (p) => p != null ? state.setGlobalPolicy(p) : null,
+              ),
+              const SizedBox(width: 8),
+            ],
             FButton(
               onPress: state.busy ? null : () => state.testAllPolicies(),
               label: const Text('Test all'),
@@ -51,32 +75,6 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
         ),
         PanelStatus(state: state),
         const SizedBox(height: 8),
-        FCard(
-          title: const Text('Policy groups'),
-          child: Column(
-            children: [
-              if (groups.isEmpty)
-                const Text('No policy groups.',
-                    style: TextStyle(color: Colors.white54)),
-              for (final g in groups)
-                _GroupRow(
-                  group: g,
-                  candidates: _candidatesFor(
-                    group: g,
-                    members: state.subPolicies[g] ?? const [],
-                    proxies: proxies,
-                    groups: groups,
-                    selected: state.environment?.selection[g],
-                  ),
-                  selected: state.environment?.selection[g],
-                  busy: state.busy,
-                  onSelect: (p) => state.selectPolicy(g, p),
-                  onRetest: () => state.testGroup(g),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         FCard(
           title: Row(
             children: [
@@ -102,9 +100,44 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
                   ),
                 )
               : Column(
+                  children: [
+                    for (final p in proxies)
+                      _ProxyRow(
+                        name: p,
+                        test: state.policyTests[p],
+                        enabled: !state.busy,
+                        onTap: () => state.testPolicy(p),
+                      ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 12),
+        FCard(
+          title: const Text('Policy groups'),
+          child: Column(
             children: [
-              for (final p in proxies)
-                _ProxyRow(name: p, test: state.policyTests[p]),
+              if (groups.isEmpty)
+                const Text('No policy groups.',
+                    style: TextStyle(color: Colors.white54)),
+              for (final g in groups)
+                _GroupRow(
+                  group: g,
+                  groupType: state.policies?.groupTypes[g],
+                  candidates: _candidatesFor(
+                    group: g,
+                    members: state.subPolicies[g] ?? const [],
+                    proxies: proxies,
+                    groups: groups,
+                    selected: state.environment?.autoOverride[g] ??
+                        state.environment?.selection[g],
+                  ),
+                  members: state.subPolicies[g] ?? const [],
+                  selected: state.environment?.selection[g],
+                  override: state.environment?.autoOverride[g],
+                  busy: state.busy,
+                  onSelect: (p) => state.selectPolicy(g, p),
+                  onOverride: (p) => state.overridePolicy(g, p),
+                ),
             ],
           ),
         ),
@@ -114,8 +147,8 @@ class _PoliciesPanelState extends State<PoliciesPanel> {
 }
 
 /// Candidate nodes for a group's selector. Prefer the group's known
-/// sub-policies; when unknown, fall back to all proxies and other groups so the
-/// selection is always editable. The current selection is always included.
+/// sub-policies; when unknown, fall back to all proxies and other groups. The
+/// current selection is always included.
 List<String> _candidatesFor({
   required String group,
   required List<String> members,
@@ -135,32 +168,66 @@ List<String> _candidatesFor({
 class _GroupRow extends StatelessWidget {
   const _GroupRow({
     required this.group,
+    required this.groupType,
     required this.candidates,
+    required this.members,
     required this.selected,
+    required this.override,
     required this.busy,
     required this.onSelect,
-    required this.onRetest,
+    required this.onOverride,
   });
 
   final String group;
+  final String? groupType;
   final List<String> candidates;
+  final List<String> members;
   final String? selected;
+  final String? override;
   final bool busy;
   final ValueChanged<String> onSelect;
-  final VoidCallback onRetest;
+  final ValueChanged<String?> onOverride;
 
   @override
   Widget build(BuildContext context) {
+    final autoCurrent =
+        _isAutoGroup(groupType) && selected != null && candidates.contains(selected)
+            ? selected
+            : null;
+    final autoLabel = autoCurrent == null ? 'Auto' : 'Auto · $autoCurrent';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           SizedBox(
-            width: 110,
+            width: 96,
             child: Text(group, overflow: TextOverflow.ellipsis),
           ),
+          _GroupTypeBadge(type: groupType),
+          const SizedBox(width: 8),
           Expanded(
-            child: candidates.isEmpty
+            child: _isAutoGroup(groupType)
+                ? Tooltip(
+                    message: members.isEmpty ? 'Auto' : members.join(', '),
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: override ?? _autoValue,
+                      items: [
+                        DropdownMenuItem(
+                          value: _autoValue,
+                          child: Text(autoLabel),
+                        ),
+                        for (final m in candidates)
+                          DropdownMenuItem(value: m, child: Text(m)),
+                      ],
+                      onChanged: busy
+                          ? null
+                          : (m) => onOverride(
+                                m == null || m == _autoValue ? null : m,
+                              ),
+                    ),
+                  )
+                : candidates.isEmpty
                 ? Text(selected ?? '—',
                     style: const TextStyle(color: Colors.white54, fontSize: 13))
                 : DropdownButton<String>(
@@ -173,31 +240,66 @@ class _GroupRow extends StatelessWidget {
                     onChanged: busy ? null : (m) => m != null ? onSelect(m) : null,
                   ),
           ),
-          IconButton(
-            icon: const Icon(Icons.repeat, size: 18),
-            tooltip: 'Retest group',
-            onPressed: busy ? null : onRetest,
-          ),
         ],
       ),
     );
   }
 }
 
+bool _isAutoGroup(String? type) => type != null && type != 'select' && type != 'unknown';
+
+class _GroupTypeBadge extends StatelessWidget {
+  const _GroupTypeBadge({required this.type});
+
+  final String? type;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = type ?? 'unknown';
+    final auto = _isAutoGroup(type);
+    return Container(
+      width: 58,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: auto ? Colors.white10 : Colors.transparent,
+        border: Border.all(color: Colors.white24),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white54, fontSize: 11),
+      ),
+    );
+  }
+}
+
 class _ProxyRow extends StatelessWidget {
-  const _ProxyRow({required this.name, this.test});
+  const _ProxyRow({
+    required this.name,
+    required this.enabled,
+    required this.onTap,
+    this.test,
+  });
   final String name;
+  final bool enabled;
+  final VoidCallback onTap;
   final PolicyTest? test;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(child: Text(name, overflow: TextOverflow.ellipsis)),
-          _latency(),
-        ],
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Expanded(child: Text(name, overflow: TextOverflow.ellipsis)),
+            _latency(),
+          ],
+        ),
       ),
     );
   }

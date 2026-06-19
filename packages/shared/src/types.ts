@@ -3,7 +3,7 @@
  * The Flutter client mirrors these shapes in `flutter/lib/core/types.dart`.
  */
 
-export type AuthMethod = "key" | "password" | "agent";
+export type AuthMethod = "key" | "password" | "agent" | "local";
 
 /** How to reach a host and authenticate the SSH bootstrap leg. */
 export interface HostConfig {
@@ -80,6 +80,7 @@ export type SurgeAction =
   | "dumpEvent" // dump event
   | "dumpVirtualIpDb" // dump virtual-ip-db
   | "dumpTempRule" // dump temp-rule
+  | "dumpSmartGroupInfo" // dump smart-group-info
   | "dumpProfileEffective" // dump profile effective
   | "dumpProfileOriginal" // dump profile original
   // streaming
@@ -104,7 +105,7 @@ export type SurgeAction =
   | "diagnostics" // diagnostics
   | "kill" // kill <connection-id>
   | "setLogLevel" // set-log-level <level>
-  | "setEnvironment" // set <key-path> <value>
+  | "setEnvironment" // set <key-path>=<value>
   | "scriptEvaluate" // script evaluate <script-js-path>
   | "checkProfile"; // --check <path>
 
@@ -141,6 +142,10 @@ export interface Environment {
   fields: Record<string, string>;
   /** ProxyGroupSelection: select-group name → currently selected policy. */
   selection: Record<string, string>;
+  /** AutoPolicyGroupOverride: auto-group name → pinned policy override. */
+  autoOverride: Record<string, string>;
+  /** AllProxyModePolicyNameKey: selected policy used when ProxyMode is Global. */
+  globalPolicy?: string;
   /** ProxyMode: 0 = Direct, 1 = Global Proxy, 2 = Rule. */
   proxyMode?: number;
   raw?: unknown;
@@ -150,6 +155,7 @@ export interface Environment {
 export interface PolicyDump {
   proxies: string[];
   groups: string[];
+  groupTypes?: Record<string, string>;
 }
 
 /** Outbound mode values for the `ProxyMode` environment key. */

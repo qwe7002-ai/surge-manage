@@ -165,19 +165,73 @@ class AppState extends ChangeNotifier {
         } catch (_) {
           subPolicies = {};
         }
+        Map<String, String> smartTypes = {};
+        try {
+          final smart = await _manager!.run(SurgeAction.dumpSmartGroupInfo);
+          smartTypes = parseSmartGroupTypes(smart.stdout);
+        } catch (_) {
+          smartTypes = {};
+        }
+        Map<String, String> profileTypes = {};
+        try {
+          final running = await _manager!.run(SurgeAction.dumpProfileEffective);
+          profileTypes = getPolicyGroupTypes(parseConfigDocument(running.stdout));
+        } catch (_) {
+          try {
+            final running = await _manager!.run(SurgeAction.dumpProfileOriginal);
+            profileTypes = getPolicyGroupTypes(parseConfigDocument(running.stdout));
+          } catch (_) {
+            profileTypes = {};
+          }
+        }
+        if (profileTypes.isEmpty) {
+          var profile = activeProfile ?? profiles.firstOrNull;
+          if (profile == null) {
+            try {
+              final listed = await _manager!.listProfiles();
+              profile = listed.firstOrNull;
+            } catch (_) {
+              profile = null;
+            }
+          }
+          if (profile != null) {
+            final text = await _manager!.readProfile(profile);
+            profileTypes = getPolicyGroupTypes(parseConfigDocument(text));
+          }
+        }
+        policies = PolicyDump(
+          proxies: policies?.proxies ?? const [],
+          groups: policies?.groups ?? const [],
+          groupTypes: {...smartTypes, ...profileTypes},
+        );
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
 
   Future<void> selectPolicy(String group, String policy) => _guard(() async {
-        await _manager!
-            .run(SurgeAction.setEnvironment, ['ProxyGroupSelection.$group', policy]);
+        _assertOk(await _manager!
+            .run(SurgeAction.setEnvironment, ['ProxyGroupSelection.$group=$policy']));
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+      });
+
+  Future<void> overridePolicy(String group, String? policy) => _guard(() async {
+        _assertOk(await _manager!.run(SurgeAction.setEnvironment, [
+          'AutoPolicyGroupOverride.$group=${policy ?? '<nil>'}',
+        ]));
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
 
   Future<void> setProxyMode(int mode) => _guard(() async {
-        await _manager!.run(SurgeAction.setEnvironment, ['ProxyMode', '$mode']);
+        _assertOk(await _manager!.run(SurgeAction.setEnvironment, ['ProxyMode=$mode']));
+        final env = await _manager!.run(SurgeAction.environment);
+        environment = parseEnvironment(env.stdout);
+      });
+
+  Future<void> setGlobalPolicy(String policy) => _guard(() async {
+        _assertOk(await _manager!
+            .run(SurgeAction.setEnvironment, ['AllProxyModePolicyNameKey=$policy']));
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
@@ -255,7 +309,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> setToggle(String key, bool on) => _guard(() async {
-        await _manager!.run(SurgeAction.setEnvironment, [key, '${on ? 1 : 0}']);
+        _assertOk(
+          await _manager!.run(SurgeAction.setEnvironment, ['$key=${on ? 1 : 0}']),
+        );
         final env = await _manager!.run(SurgeAction.environment);
         environment = parseEnvironment(env.stdout);
       });
@@ -291,20 +347,13 @@ class AppState extends ChangeNotifier {
         await refreshPolicies();
       });
 
-  /// Remote profile path: `<configDir>/<profile>.conf`, defaulting the dir.
-  String _profilePath(String profile) {
-    final host = selectedHost;
-    final raw = host?.configDir?.trim();
-    final dir = (raw != null && raw.isNotEmpty) ? raw : kDefaultConfigDir;
-    final trimmed = dir.replaceAll(RegExp(r'/+$'), '');
-    return '$trimmed/$profile.conf';
-  }
-
   /// Read a config section's entry lines from a profile file.
   Future<List<String>> readProfileSection(String profile, String section) async {
-    final text = await _manager!.readProfile(_profilePath(profile));
+    final text = await _manager!.readProfile(profile);
     return getSectionEntries(parseConfigDocument(text), section);
   }
+
+  Future<String> readProfileText(String profile) => _manager!.readProfile(profile);
 
   /// Replace a config section's entries in a profile file, then reload.
   Future<void> writeProfileSection(
@@ -313,28 +362,26 @@ class AppState extends ChangeNotifier {
     List<String> entries,
   ) =>
       _guard(() async {
-        final path = _profilePath(profile);
         // Read-modify-write so we only touch this section, preserving the rest.
-        final text = await _manager!.readProfile(path);
+        final text = await _manager!.readProfile(profile);
         final next = setSectionEntries(parseConfigDocument(text), section, entries);
-        await _manager!.writeProfile(path, serializeConfigDocument(next));
+        await _manager!.writeProfile(profile, serializeConfigDocument(next));
         await _manager!.run(SurgeAction.reload);
         lastInfo = 'Saved $section to $profile.conf and reloaded';
       });
 
   /// Read the `[Rule]` section as ordered rules, including `#`-disabled ones.
   Future<List<RuleEntry>> readProfileRules(String profile) async {
-    final text = await _manager!.readProfile(_profilePath(profile));
+    final text = await _manager!.readProfile(profile);
     return getRuleEntries(parseConfigDocument(text), 'Rule');
   }
 
   /// Replace the `[Rule]` section from rule entries (disabled → `#`), reload.
   Future<void> writeProfileRules(String profile, List<RuleEntry> entries) =>
       _guard(() async {
-        final path = _profilePath(profile);
-        final text = await _manager!.readProfile(path);
+        final text = await _manager!.readProfile(profile);
         final next = setRuleEntries(parseConfigDocument(text), 'Rule', entries);
-        await _manager!.writeProfile(path, serializeConfigDocument(next));
+        await _manager!.writeProfile(profile, serializeConfigDocument(next));
         await _manager!.run(SurgeAction.reload);
         lastInfo = 'Saved Rule to $profile.conf and reloaded';
       });
@@ -350,6 +397,12 @@ class AppState extends ChangeNotifier {
         _mergeTests(parsePolicyTests(r.stdout));
       });
 
+  Future<void> testPolicy(String name) => _guard(() async {
+        final r = await _manager!.run(SurgeAction.testPolicy, [name]);
+        _mergeTests(parsePolicyTests(r.stdout));
+        lastInfo = 'Tested policy "$name"';
+      });
+
   Future<void> testGroup(String name) => _guard(() async {
         final r = await _manager!.run(SurgeAction.testGroup, [name]);
         _mergeTests(parsePolicyTests(r.stdout));
@@ -359,6 +412,7 @@ class AppState extends ChangeNotifier {
   Future<void> runAction(SurgeAction action, [List<String> args = const []]) =>
       _guard(() async {
         final r = await _manager!.run(action, args);
+        _assertOk(r);
         final text = r.stdout.trim();
         lastInfo = text.isNotEmpty
             ? (text.length > 4000 ? text.substring(0, 4000) : text)
@@ -400,4 +454,14 @@ class AppState extends ChangeNotifier {
     _teardownManager();
     super.dispose();
   }
+}
+
+void _assertOk(CommandResult result) {
+  if (result.exitCode == 0) return;
+  final text = result.stdout.trim();
+  throw StateError(
+    text.isNotEmpty
+        ? text
+        : '${result.action.name} failed with exit code ${result.exitCode}',
+  );
 }

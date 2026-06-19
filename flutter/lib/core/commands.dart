@@ -62,6 +62,11 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       argv: ['--raw', 'dump', 'temp-rule'],
       mutates: false,
       arity: 0),
+  SurgeAction.dumpSmartGroupInfo: CommandSpec(
+      action: SurgeAction.dumpSmartGroupInfo,
+      argv: ['--raw', 'dump', 'smart-group-info'],
+      mutates: false,
+      arity: 0),
   SurgeAction.dumpProfileEffective: CommandSpec(
       action: SurgeAction.dumpProfileEffective,
       argv: ['dump', 'profile', 'effective'],
@@ -139,12 +144,12 @@ const Map<SurgeAction, CommandSpec> commandCatalog = {
       CommandSpec(action: SurgeAction.kill, argv: ['kill', '{0}'], mutates: true, arity: 1),
   SurgeAction.setLogLevel: CommandSpec(
       action: SurgeAction.setLogLevel, argv: ['set-log-level', '{0}'], mutates: true, arity: 1),
-  // `set` takes a key path and a separate value token.
+  // `set` takes one or more `key=value` tokens. Call once per scalar update.
   SurgeAction.setEnvironment: CommandSpec(
       action: SurgeAction.setEnvironment,
-      argv: ['set', '{0}', '{1}'],
+      argv: ['set', '{0}'],
       mutates: true,
-      arity: 2),
+      arity: 1),
   SurgeAction.scriptEvaluate: CommandSpec(
       action: SurgeAction.scriptEvaluate,
       argv: ['script', 'evaluate', '{0}'],

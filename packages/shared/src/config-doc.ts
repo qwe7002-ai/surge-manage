@@ -72,6 +72,20 @@ export function setSectionEntries(
   return next;
 }
 
+/** Parse `[Proxy Group]` lines into group name → group type (`select`, `smart`, …). */
+export function getPolicyGroupTypes(sections: ConfigSection[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of getSectionEntries(sections, "Proxy Group")) {
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const name = line.slice(0, eq).trim();
+    const rest = line.slice(eq + 1).trim();
+    const type = rest.split(",", 1)[0]?.trim().toLowerCase();
+    if (name && type) out[name] = type;
+  }
+  return out;
+}
+
 /**
  * A single line of a Surge `[Rule]` section. A `#`-prefixed line that still
  * looks like a rule is a *disabled* rule (toggleable); one that does not is a

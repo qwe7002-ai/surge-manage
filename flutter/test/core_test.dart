@@ -27,9 +27,9 @@ void main() {
       buildCommandLine(
         profile,
         SurgeAction.setEnvironment,
-        ['ProxyGroupSelection.Proxy', 'HK'],
+        ['ProxyGroupSelection.Proxy=HK'],
       ),
-      'surge-cli set ProxyGroupSelection.Proxy HK',
+      'surge-cli set ProxyGroupSelection.Proxy=HK',
     );
     expect(
       buildCommandLine(profile, SurgeAction.scriptEvaluate, ['/tmp/test.js']),

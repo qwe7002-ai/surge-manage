@@ -56,6 +56,7 @@ A single declarative catalog maps each action 1:1 onto a real **Surge CLI** comm
 | `dumpDns`               | `surge-cli --raw dump dns`    | JSON                |
 | `dumpEvent`             | `surge-cli --raw dump event`  | JSON                |
 | `dumpVirtualIpDb`       | `surge-cli --raw dump virtual-ip-db` | JSON        |
+| `dumpSmartGroupInfo`    | `surge-cli --raw dump smart-group-info` | JSON        |
 | `dumpProfileEffective`  | `surge-cli dump profile effective` | text           |
 | `dumpProfileOriginal`   | `surge-cli dump profile original`  | text           |
 | `reload`                | `surge-cli reload`            | exit-code           |
@@ -71,7 +72,7 @@ A single declarative catalog maps each action 1:1 onto a real **Surge CLI** comm
 | `diagnostics`           | `surge-cli diagnostics`       | text                |
 | `kill`                  | `surge-cli kill <id>`         | exit-code           |
 | `setLogLevel`           | `surge-cli set-log-level <l>` | exit-code           |
-| `setEnvironment`        | `surge-cli set <key> <value>` | exit-code           |
+| `setEnvironment`        | `surge-cli set <key>=<value>` | exit-code           |
 | `scriptEvaluate`        | `surge-cli script evaluate <path>` | text/exit-code |
 | `checkProfile`          | `surge-cli --check <path>`    | text/exit-code      |
 
@@ -108,6 +109,8 @@ Core entities (see `packages/shared/src/types.ts`):
 
 - **HostConfig** — id, label, host, port, username, auth method, surge profile, and an
   optional `configDir` (Surge's profile directory on the remote, used to list/switch profiles).
+  Electron also supports `auth: "local"` as a test-only debug mode; it skips SSH and runs the
+  configured Surge binary on the local machine.
 - **SurgeProfile** — binary path + argv overrides for the command catalog.
 - **ConnectionState** — `disconnected | connecting | connected | error`.
 - **Environment / PolicyDump / PolicyTest / Rule / ActiveConnection / Traffic / LogLine** —
@@ -140,6 +143,8 @@ window.surge.connection.disconnect()
 window.surge.connection.onState(cb)             // ConnectionState changes
 window.surge.surge.run(action, args?)           // structured command → CommandResult
 window.surge.profiles.list()                    // *.conf names in configDir (via ls)
+window.surge.profiles.read(profile)             // read a validated profile name
+window.surge.profiles.write(profile, content)   // check + backup + atomic replace
 window.surge.logs.start() / stop()              // begin/end parsed request streaming
 window.surge.logs.onLine(cb)                    // parsed LogLine events
 ```
@@ -147,7 +152,7 @@ window.surge.logs.onLine(cb)                    // parsed LogLine events
 ### Feature coverage
 
 Beyond inspection, the UI drives Surge's mutating commands: outbound mode
-(`set ProxyMode <mode>`), policy-group selection (`set ProxyGroupSelection.<g> <p>`), feature
+(`set ProxyMode=<mode>`), policy-group selection (`set ProxyGroupSelection.<g>=<p>`), feature
 toggles (`set MitMEnabled|RewriteEnabled|ScriptingEnabled|Replica`), live connection
 killing (`kill <id>` from the Connections tab), profile switching (`switch-profile`, with
 the candidate list read from `configDir`), DNS flush, diagnostics, and log-level changes.

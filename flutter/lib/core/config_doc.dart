@@ -82,6 +82,20 @@ List<ConfigSection> setSectionEntries(
   return next;
 }
 
+/// Parse `[Proxy Group]` lines into group name → group type (`select`, `smart`, …).
+Map<String, String> getPolicyGroupTypes(List<ConfigSection> sections) {
+  final out = <String, String>{};
+  for (final line in getSectionEntries(sections, 'Proxy Group')) {
+    final eq = line.indexOf('=');
+    if (eq == -1) continue;
+    final name = line.substring(0, eq).trim();
+    final rest = line.substring(eq + 1).trim();
+    final type = rest.split(',').first.trim().toLowerCase();
+    if (name.isNotEmpty && type.isNotEmpty) out[name] = type;
+  }
+  return out;
+}
+
 /// A single line of a Surge `[Rule]` section. A `#`-prefixed line that still
 /// looks like a rule is a *disabled* rule (toggleable); one that does not is a
 /// plain *comment* (shown read-only, never toggled into a rule).

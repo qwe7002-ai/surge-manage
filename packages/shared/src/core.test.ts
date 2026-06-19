@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildCommandLine, shellQuote } from "../dist/commands.js";
+import { buildCommandArgv, buildCommandLine, shellQuote } from "../dist/commands.js";
 import {
   aggregateTraffic,
   parseActive,
@@ -9,11 +9,13 @@ import {
   parsePolicies,
   parsePolicyTests,
   parseRules,
+  parseSmartGroupTypes,
   parseSubPolicies,
   parseTempRules,
 } from "../dist/parsers.js";
 import {
   getRuleEntries,
+  getPolicyGroupTypes,
   getSectionEntries,
   parseConfigDocument,
   serializeConfigDocument,
@@ -39,10 +41,10 @@ test("buildCommandLine maps to real surge commands with --raw", () => {
     "surge switch-profile 'Home Profile'",
   );
   assert.equal(buildCommandLine(profile, "kill", ["42"]), "surge kill 42");
-  // `set` takes a key path and a separate value token.
+  // `set` takes `key=value` tokens.
   assert.equal(
-    buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy", "HK"]),
-    "surge set ProxyGroupSelection.Proxy HK",
+    buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy=HK"]),
+    "surge set ProxyGroupSelection.Proxy=HK",
   );
   assert.equal(
     buildCommandLine(profile, "scriptEvaluate", ["/tmp/test.js"]),
@@ -52,6 +54,19 @@ test("buildCommandLine maps to real surge commands with --raw", () => {
     buildCommandLine(profile, "checkProfile", ["/tmp/Profile.conf"]),
     "surge --check /tmp/Profile.conf",
   );
+});
+
+test("buildCommandArgv returns unquoted tokens for local execution", () => {
+  assert.deepEqual(buildCommandArgv(profile, "switchProfile", ["Home Profile"]), [
+    "surge",
+    "switch-profile",
+    "Home Profile",
+  ]);
+  assert.deepEqual(buildCommandArgv(profile, "checkProfile", ["/tmp/Profile.conf"]), [
+    "surge",
+    "--check",
+    "/tmp/Profile.conf",
+  ]);
 });
 
 test("buildCommandLine enforces arity (injection guard)", () => {
@@ -65,10 +80,12 @@ test("shellQuote escapes single quotes", () => {
 
 test("parseEnvironment flattens, unwraps envelope, extracts selection/mode", () => {
   const env = parseEnvironment(
-    '{"environment":{"ProxyMode":2,"ProxyGroupSelection":{"Proxy":"HK"},"MitMEnabled":1}}',
+    '{"environment":{"ProxyMode":2,"AllProxyModePolicyNameKey":"US","ProxyGroupSelection":{"Proxy":"HK"},"AutoPolicyGroupOverride":{"NAME":"US"},"MitMEnabled":1}}',
   );
   assert.equal(env.proxyMode, 2);
+  assert.equal(env.globalPolicy, "US");
   assert.equal(env.selection["Proxy"], "HK");
+  assert.equal(env.autoOverride["NAME"], "US");
   assert.equal(env.fields["MitMEnabled"], "1");
   // Also works without the envelope wrapper.
   const flat = parseEnvironment('{"ProxyMode":0}');
@@ -101,6 +118,22 @@ test("config-doc round-trips and edits one section without clobbering others", (
   // A section added when absent is appended.
   const withDns = setSectionEntries(doc, "DNS", ["server = 1.1.1.1"]);
   assert.ok(serializeConfigDocument(withDns).includes("[DNS]"));
+});
+
+test("getPolicyGroupTypes reads proxy group declaration types", () => {
+  const doc = parseConfigDocument(
+    [
+      "[Proxy Group]",
+      "Relay = select, DIRECT, OUS",
+      "Apple = smart, US, CA",
+      "Auto = url-test, US, CA",
+    ].join("\n"),
+  );
+  assert.deepEqual(getPolicyGroupTypes(doc), {
+    Relay: "select",
+    Apple: "smart",
+    Auto: "url-test",
+  });
 });
 
 test("getRuleEntries classifies rules, disabled rules and plain comments", () => {
@@ -147,6 +180,13 @@ test("parsePolicies reads proxies + policy-groups names", () => {
   );
   assert.deepEqual(dump.proxies, ["UK", "US", "CA"]);
   assert.deepEqual(dump.groups, ["Relay", "Apple", "FINAL"]);
+});
+
+test("parseSmartGroupTypes reads smart group names", () => {
+  const groups = parseSmartGroupTypes(
+    '{"Apple":{"POLICY::a":{"usage":0}},"Warp":{"POLICY::b":{"usage":1}},"report":{"Apple":{}}}',
+  );
+  assert.deepEqual(groups, { Apple: "smart", Warp: "smart" });
 });
 
 test("parsePolicyTests reads latency + error per proxy", () => {

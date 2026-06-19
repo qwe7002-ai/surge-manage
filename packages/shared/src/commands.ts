@@ -62,6 +62,12 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
     mutates: false,
     arity: 0,
   },
+  dumpSmartGroupInfo: {
+    action: "dumpSmartGroupInfo",
+    argv: ["--raw", "dump", "smart-group-info"],
+    mutates: false,
+    arity: 0,
+  },
   dumpProfileEffective: {
     action: "dumpProfileEffective",
     argv: ["dump", "profile", "effective"],
@@ -138,8 +144,8 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   diagnostics: { action: "diagnostics", argv: ["diagnostics"], mutates: false, arity: 0 },
   kill: { action: "kill", argv: ["kill", "{0}"], mutates: true, arity: 1 },
   setLogLevel: { action: "setLogLevel", argv: ["set-log-level", "{0}"], mutates: true, arity: 1 },
-  // `set` takes a key path and a separate value token.
-  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}", "{1}"], mutates: true, arity: 2 },
+  // `set` takes one or more `key=value` tokens. Call once per scalar update.
+  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}"], mutates: true, arity: 1 },
   scriptEvaluate: {
     action: "scriptEvaluate",
     argv: ["script", "evaluate", "{0}"],
@@ -178,6 +184,21 @@ export function buildCommandLine(
   action: SurgeAction,
   args: string[] = [],
 ): string {
+  const command = buildCommandArgv(profile, action, args);
+  const bin = command[0]!;
+  const argv = command.slice(1);
+  return [shellQuote(bin), ...argv.map(shellQuote)].join(" ");
+}
+
+/**
+ * Resolve a command into executable + argv tokens for local process execution.
+ * Unlike {@link buildCommandLine}, no shell quoting is applied.
+ */
+export function buildCommandArgv(
+  profile: SurgeProfile,
+  action: SurgeAction,
+  args: string[] = [],
+): string[] {
   const spec = COMMAND_CATALOG[action];
   if (!spec) throw new Error(`Unknown surge action: ${action}`);
   if (args.length !== spec.arity) {
@@ -187,16 +208,16 @@ export function buildCommandLine(
   }
 
   const template = profile.argv?.[action] ?? spec.argv;
-  const resolved = template.map((tok) => {
+  const resolved = template.map((tok): string => {
     const m = PLACEHOLDER.exec(tok);
-    if (!m) return shellQuote(tok);
+    if (!m) return tok;
     const idx = Number(m[1]);
     const value = args[idx];
     if (value === undefined) {
       throw new Error(`Missing positional arg {${idx}} for action "${action}"`);
     }
-    return shellQuote(value);
+    return value;
   });
 
-  return [shellQuote(profile.bin), ...resolved].join(" ");
+  return [profile.bin, ...resolved];
 }

@@ -72,7 +72,9 @@ export function Sidebar() {
                 )}
               </div>
               <div className="mt-0.5 truncate pl-6 text-xs text-muted-foreground">
-                {host.username}@{host.host}:{host.port}
+                {host.auth === "local"
+                  ? "Local Surge CLI debug"
+                  : `${host.username}@${host.host}:${host.port}`}
               </div>
               {isSelected && (
                 <div className="mt-2 flex items-center gap-1.5 pl-6">
