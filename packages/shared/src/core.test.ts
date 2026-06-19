@@ -22,6 +22,13 @@ import {
   setRuleEntries,
   setSectionEntries,
 } from "../dist/config-doc.js";
+import {
+  getProxyParam,
+  parseProxyLine,
+  protocolUsesServer,
+  serializeProxyLine,
+  setProxyParam,
+} from "../dist/proxy.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -302,4 +309,47 @@ test("parseActive reads Surge {requests:[...]} envelope with numeric ids", () =>
   assert.equal(conns[0]!.id, "42"); // numeric id coerced to string for `kill`
   assert.equal(conns[0]!.policy, "HK");
   assert.equal(conns[0]!.downloadBytes, 1000);
+});
+
+test("parseProxyLine splits server/port and key=value params", () => {
+  const c = parseProxyLine(
+    "asia-warp = ss, asia.reallsys.eu, 30000, encrypt-method=2022-blake3-aes-128-gcm, password=secret, udp-relay=true",
+  )!;
+  assert.equal(c.name, "asia-warp");
+  assert.equal(c.type, "ss");
+  assert.equal(c.server, "asia.reallsys.eu");
+  assert.equal(c.port, "30000");
+  assert.equal(getProxyParam(c, "encrypt-method"), "2022-blake3-aes-128-gcm");
+  assert.equal(getProxyParam(c, "udp-relay"), "true");
+  assert.deepEqual(c.extraPositional, []);
+});
+
+test("parseProxyLine keeps positional args for server-less protocols", () => {
+  const c = parseProxyLine("Local = direct")!;
+  assert.equal(c.type, "direct");
+  assert.equal(c.server, undefined);
+  assert.equal(protocolUsesServer("direct"), false);
+});
+
+test("serializeProxyLine round-trips a parsed line", () => {
+  const line =
+    "HK = trojan, hk.example.com, 443, password=p, sni=hk.example.com, skip-cert-verify=true";
+  const c = parseProxyLine(line)!;
+  assert.equal(serializeProxyLine(c), line);
+});
+
+test("setProxyParam updates, appends, and removes by case-insensitive key", () => {
+  let c = parseProxyLine("HK = ss, h, 1, password=a")!;
+  c = setProxyParam(c, "password", "b");
+  assert.equal(getProxyParam(c, "password"), "b");
+  c = setProxyParam(c, "udp-relay", "true");
+  assert.equal(getProxyParam(c, "udp-relay"), "true");
+  c = setProxyParam(c, "Password", ""); // empty removes (case-insensitive)
+  assert.equal(getProxyParam(c, "password"), undefined);
+  assert.equal(serializeProxyLine(c), "HK = ss, h, 1, udp-relay=true");
+});
+
+test("parseProxyLine returns undefined for malformed entries", () => {
+  assert.equal(parseProxyLine("no-equals-here"), undefined);
+  assert.equal(parseProxyLine("= ss, h, 1"), undefined);
 });

@@ -1,6 +1,10 @@
 import { type MouseEventHandler, useEffect, useState } from "react";
 import { Gauge, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { PROXY_MODES, type PolicyTest } from "@surge-manage/shared";
+import {
+  PROXY_MODES,
+  type PolicyTest,
+  proxyEntryName,
+} from "@surge-manage/shared";
 import {
   Card,
   CardContent,
@@ -17,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -26,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Disconnected } from "@/components/Disconnected";
+import { ProxyEditor } from "@/components/ProxyEditor";
 import { useApp } from "@/store/app-store";
 
 const AUTO_VALUE = "__auto__";
@@ -289,24 +293,23 @@ export function PoliciesPanel() {
       )}
 
       <Dialog open={!!proxyEditor} onOpenChange={(open) => !open && setProxyEditor(null)}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit proxy</DialogTitle>
+            <DialogTitle>Edit Proxy</DialogTitle>
             <DialogDescription>
-              Update the raw [Proxy] entry in {proxyEditor?.profile}.conf, then save and
-              reload Surge.
+              Edit the [Proxy] entry “{proxyEditor?.name}” in {proxyEditor?.profile}.conf,
+              then save and reload Surge.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            value={proxyEditor?.line ?? ""}
-            className="font-mono text-xs"
-            placeholder="Name = type, server, port, ..."
-            onChange={(ev) =>
-              setProxyEditor((current) =>
-                current ? { ...current, line: ev.target.value } : current,
-              )
-            }
-          />
+          {proxyEditor && (
+            <ProxyEditor
+              key={`${proxyEditor.profile}:${proxyEditor.name}`}
+              initialLine={proxyEditor.line}
+              onChange={(line) =>
+                setProxyEditor((current) => (current ? { ...current, line } : current))
+              }
+            />
+          )}
           {proxyEditError && (
             <p className="text-xs text-destructive">{proxyEditError}</p>
           )}
@@ -446,13 +449,6 @@ function ProxyRow({
       <Latency test={test} />
     </button>
   );
-}
-
-function proxyEntryName(entry: string): string | undefined {
-  const eq = entry.indexOf("=");
-  if (eq === -1) return undefined;
-  const name = entry.slice(0, eq).trim();
-  return name || undefined;
 }
 
 function errText(e: unknown): string {
