@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Gauge, RefreshCw, Repeat } from "lucide-react";
-import type { PolicyTest } from "@surge-manage/shared";
+import { PROXY_MODES, type PolicyTest } from "@surge-manage/shared";
 import {
   Card,
   CardContent,
@@ -23,6 +23,7 @@ export function PoliciesPanel() {
   const connected = useApp((s) => s.connection.phase === "connected");
   const policies = useApp((s) => s.policies);
   const subPolicies = useApp((s) => s.subPolicies);
+  const proxyMode = useApp((s) => s.environment?.proxyMode);
   const selection = useApp((s) => s.environment?.selection ?? {});
   const policyTests = useApp((s) => s.policyTests);
   const busy = useApp((s) => s.busy);
@@ -30,6 +31,7 @@ export function PoliciesPanel() {
   const testAllPolicies = useApp((s) => s.testAllPolicies);
   const testGroup = useApp((s) => s.testGroup);
   const selectPolicy = useApp((s) => s.selectPolicy);
+  const setProxyMode = useApp((s) => s.setProxyMode);
 
   useEffect(() => {
     if (connected) void refreshPolicies();
@@ -46,7 +48,26 @@ export function PoliciesPanel() {
         <h2 className="text-sm font-medium text-muted-foreground">
           {groups.length} groups · {proxies.length} proxies
         </h2>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Mode</span>
+            <Select
+              value={proxyMode != null ? String(proxyMode) : undefined}
+              disabled={busy}
+              onValueChange={(v) => void setProxyMode(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-28">
+                <SelectValue placeholder="mode…" />
+              </SelectTrigger>
+              <SelectContent>
+                {PROXY_MODES.map((m) => (
+                  <SelectItem key={m.value} value={String(m.value)}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" disabled={busy} onClick={() => void testAllPolicies()}>
             <Gauge /> Test all
           </Button>

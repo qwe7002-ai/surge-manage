@@ -263,7 +263,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   async setToggle(key, on) {
     await guarded(set, async () => {
-      await window.surge.surge.run("setEnvironment", [`${key}=${on ? 1 : 0}`]);
+      await window.surge.surge.run("setEnvironment", [key, String(on ? 1 : 0)]);
       await get().refreshEnvironment();
     });
   },
@@ -294,7 +294,8 @@ export const useApp = create<AppState>((set, get) => ({
   async selectPolicy(group, policy) {
     await guarded(set, async () => {
       await window.surge.surge.run("setEnvironment", [
-        `ProxyGroupSelection.${group}=${policy}`,
+        `ProxyGroupSelection.${group}`,
+        policy,
       ]);
       await get().refreshEnvironment();
     });
@@ -302,7 +303,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   async setProxyMode(mode) {
     await guarded(set, async () => {
-      await window.surge.surge.run("setEnvironment", [`ProxyMode=${mode}`]);
+      await window.surge.surge.run("setEnvironment", ["ProxyMode", String(mode)]);
       await get().refreshEnvironment();
     });
   },

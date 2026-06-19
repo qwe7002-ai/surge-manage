@@ -7,9 +7,15 @@ import react from "@vitejs/plugin-react";
 // stay external and are collected by electron-builder.
 const externalize = () =>
   externalizeDepsPlugin({ exclude: ["@surge-manage/shared"] });
+const sharedAlias = {
+  "@surge-manage/shared": resolve(__dirname, "../packages/shared/src/index.ts"),
+};
 
 export default defineConfig({
   main: {
+    resolve: {
+      alias: sharedAlias,
+    },
     plugins: [externalize()],
     build: {
       rollupOptions: {
@@ -18,6 +24,9 @@ export default defineConfig({
     },
   },
   preload: {
+    resolve: {
+      alias: sharedAlias,
+    },
     plugins: [externalize()],
     build: {
       rollupOptions: {
@@ -31,6 +40,7 @@ export default defineConfig({
     resolve: {
       alias: {
         "@": resolve(__dirname, "src/renderer"),
+        ...sharedAlias,
       },
     },
     build: {

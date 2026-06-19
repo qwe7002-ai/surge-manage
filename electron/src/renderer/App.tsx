@@ -32,7 +32,7 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-        <header className="titlebar-drag flex h-11 shrink-0 items-center border-b px-4">
+        <header className="titlebar-drag flex h-11 shrink-0 items-center border-b py-0 pl-24 pr-4">
           <Network className="mr-2 h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold tracking-tight">Surge Manage</span>
           <span className="ml-2 text-xs text-muted-foreground">

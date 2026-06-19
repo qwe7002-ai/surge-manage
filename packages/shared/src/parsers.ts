@@ -103,8 +103,16 @@ export function parseEnvironment(stdout: string): Environment {
   return { fields, selection, proxyMode, raw: json ?? stdout };
 }
 
+function nameOf(v: unknown): string | undefined {
+  if (typeof v === "string") return v;
+  const rec = asRecord(v);
+  return rec ? str(rec.name) ?? str(rec.key) ?? str(rec.url) ?? str(rec.path) : undefined;
+}
+
 function toNames(v: unknown): string[] {
-  return Array.isArray(v) ? v.map((m) => str(m) ?? String(m)) : [];
+  return Array.isArray(v)
+    ? v.map(nameOf).filter((m): m is string => !!m)
+    : [];
 }
 
 /**
@@ -126,7 +134,10 @@ export function parsePolicies(stdout: string): PolicyDump {
 export function parseSubPolicies(stdout: string): Record<string, string[]> {
   const outer = asRecord(tryJson(stdout));
   if (!outer) return {};
-  const rec = asRecord(unwrap(outer, "policy-group-sub-policies")) ?? outer;
+  const rec =
+    asRecord(outer.map) ??
+    asRecord(unwrap(outer, "policy-group-sub-policies")) ??
+    outer;
   const out: Record<string, string[]> = {};
   for (const [group, value] of Object.entries(rec)) {
     if (Array.isArray(value)) out[group] = toNames(value);
@@ -165,10 +176,16 @@ export function parsePolicyTests(stdout: string): PolicyTest[] {
 
 export function parseRules(stdout: string): Rule[] {
   const json = tryJson(stdout);
-  if (Array.isArray(json)) {
-    return json
-      .map(asRecord)
-      .filter((r): r is Record<string, unknown> => !!r)
+  const rules = Array.isArray(json)
+    ? json
+    : Array.isArray(asRecord(json)?.rules)
+      ? (asRecord(json)!.rules as unknown[])
+      : undefined;
+  const objectRules = rules
+    ?.map(asRecord)
+    .filter((r): r is Record<string, unknown> => !!r);
+  if (objectRules?.length) {
+    return objectRules
       .map((r) => ({
         type: str(r.type) ?? "",
         value: str(r.value) ?? str(r.pattern) ?? "",
@@ -177,10 +194,12 @@ export function parseRules(stdout: string): Rule[] {
       }))
       .filter((r) => r.type);
   }
+  const textRules = rules
+    ?.map((r) => str(r))
+    .filter((r): r is string => !!r);
   // Fallback: parse classic comma-separated rule lines:
   // "DOMAIN-SUFFIX,google.com,Proxy"
-  return stdout
-    .split(/\r?\n/)
+  return (textRules ?? stdout.split(/\r?\n/))
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#"))
     .map((line) => {
@@ -207,6 +226,8 @@ export function parseTempRules(stdout: string): string[] {
     ? json
     : Array.isArray(asRecord(json)?.["temp-rule"])
       ? (asRecord(json)!["temp-rule"] as unknown[])
+      : Array.isArray(asRecord(json)?.rules)
+        ? (asRecord(json)!.rules as unknown[])
       : undefined;
   if (arr) {
     return arr
@@ -233,13 +254,15 @@ export function parseExternalResources(stdout: string): ExternalResource[] {
     ? json
     : Array.isArray(asRecord(json)?.resources)
       ? (asRecord(json)!.resources as unknown[])
+      : Array.isArray(asRecord(json)?.defines)
+        ? (asRecord(json)!.defines as unknown[])
       : [];
   return list
     .map(asRecord)
     .filter((r): r is Record<string, unknown> => !!r)
     .map((r) => ({
       key: str(r.key) ?? str(r.hash) ?? str(r.url) ?? "",
-      url: str(r.url),
+      url: str(r.url) ?? str(r.path),
       ready: typeof r.ready === "boolean" ? r.ready : undefined,
       updatedAt: num(r.updatedAt) ?? num(r.updated),
     }))
@@ -253,20 +276,30 @@ export function parseActive(stdout: string): ActiveConnection[] {
     ? json
     : Array.isArray(asRecord(json)?.connections)
       ? (asRecord(json)!.connections as unknown[])
+      : Array.isArray(asRecord(json)?.requests)
+        ? (asRecord(json)!.requests as unknown[])
+        : Array.isArray(asRecord(json)?.["active-requests"])
+          ? (asRecord(json)!["active-requests"] as unknown[])
       : [];
   return list
     .map(asRecord)
     .filter((c): c is Record<string, unknown> => !!c)
     .map((c, i) => ({
-      id: str(c.id) ?? str(c.connectionId) ?? String(i),
+      id: str(c.id) ?? str(c.connectionId) ?? String(c.id ?? i),
       remote:
+        str(c.remoteHost) ??
+        str(c.URL) ??
         str(c.remoteAddress) ??
         str(c.remote) ??
         str(c.host) ??
         str(c.url) ??
         "—",
-      policy: str(c.policyName) ?? str(c.policy) ?? str(c.proxy),
-      rule: str(c.rule),
+      policy:
+        str(c.policyName) ??
+        str(c.originalPolicyName) ??
+        str(c.policy) ??
+        str(c.proxy),
+      rule: str(c.rule) ?? str(c.ruleName),
       uploadBytes: num(c.outBytes) ?? num(c.uploadBytes) ?? num(c.upload),
       downloadBytes: num(c.inBytes) ?? num(c.downloadBytes) ?? num(c.download),
       raw: c,

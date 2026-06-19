@@ -15,8 +15,10 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
+      "@surge-manage/shared": ["../packages/shared/src/index.ts"],
       "@/*": ["src/renderer/*"]
     }
   },
-  "include": ["src/renderer/**/*"]
+  "include": ["src/renderer/**/*", "../packages/shared/src/**/*"],
+  "exclude": ["../packages/shared/src/**/*.test.ts"]
 }

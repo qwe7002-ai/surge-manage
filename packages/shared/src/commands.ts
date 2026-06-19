@@ -125,9 +125,8 @@ export const COMMAND_CATALOG: Record<SurgeAction, CommandSpec> = {
   diagnostics: { action: "diagnostics", argv: ["diagnostics"], mutates: false, arity: 0 },
   kill: { action: "kill", argv: ["kill", "{0}"], mutates: true, arity: 1 },
   setLogLevel: { action: "setLogLevel", argv: ["set-log-level", "{0}"], mutates: true, arity: 1 },
-  // `set` takes one or more `key=value` tokens; we pass a single pre-joined
-  // "key=value" string as {0} (e.g. "ProxyGroupSelection.Proxy=HK").
-  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}"], mutates: true, arity: 1 },
+  // `set` takes a key path and a separate value token.
+  setEnvironment: { action: "setEnvironment", argv: ["set", "{0}", "{1}"], mutates: true, arity: 2 },
 };
 
 /**

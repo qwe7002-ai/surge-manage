@@ -25,10 +25,10 @@ test("buildCommandLine maps to real surge commands with --raw", () => {
     "surge switch-profile 'Home Profile'",
   );
   assert.equal(buildCommandLine(profile, "kill", ["42"]), "surge kill 42");
-  // `set` takes a single key=value token.
+  // `set` takes a key path and a separate value token.
   assert.equal(
-    buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy=HK"]),
-    "surge set ProxyGroupSelection.Proxy=HK",
+    buildCommandLine(profile, "setEnvironment", ["ProxyGroupSelection.Proxy", "HK"]),
+    "surge set ProxyGroupSelection.Proxy HK",
   );
 });
 
@@ -57,6 +57,10 @@ test("parseSubPolicies maps group → members", () => {
   const subs = parseSubPolicies('{"Proxy":["HK","US"],"Apple":{"all":["DIRECT","Proxy"]}}');
   assert.deepEqual(subs["Proxy"], ["HK", "US"]);
   assert.deepEqual(subs["Apple"], ["DIRECT", "Proxy"]);
+  const surge = parseSubPolicies(
+    '{"map":{"Relay":[{"name":"DIRECT","isGroup":false},{"name":"OUS","isGroup":true}]}}',
+  );
+  assert.deepEqual(surge["Relay"], ["DIRECT", "OUS"]);
 });
 
 test("parsePolicies reads proxies + policy-groups names", () => {
@@ -83,6 +87,9 @@ test("parsePolicyTests reads latency + error per proxy", () => {
 test("parseRules parses json and csv fallback", () => {
   const json = parseRules('[{"type":"FINAL","value":"","policy":"Proxy"}]');
   assert.equal(json[0]!.policy, "Proxy");
+  const wrapped = parseRules('{"rules":["DOMAIN-SUFFIX,apache.org,emome","FINAL,FINAL"]}');
+  assert.equal(wrapped.length, 2);
+  assert.equal(wrapped[0]!.value, "apache.org");
   const csv = parseRules("DOMAIN-SUFFIX,google.com,Proxy\n# comment\nFINAL,Direct");
   assert.equal(csv.length, 2);
   assert.equal(csv[0]!.value, "google.com");
@@ -96,6 +103,7 @@ test("parseTempRules handles strings, objects, and text", () => {
     ["DOMAIN-SUFFIX,b.com,DIRECT"],
   );
   assert.deepEqual(parseTempRules("DOMAIN,c.com,Proxy\n# c\n"), ["DOMAIN,c.com,Proxy"]);
+  assert.deepEqual(parseTempRules('{"rules":["DOMAIN,d.com,Proxy"]}'), ["DOMAIN,d.com,Proxy"]);
 });
 
 test("parseExternalResources reads key/ready/updatedAt", () => {
@@ -105,6 +113,10 @@ test("parseExternalResources reads key/ready/updatedAt", () => {
   assert.equal(r[0]!.key, "abc");
   assert.equal(r[0]!.ready, true);
   assert.equal(r[0]!.updatedAt, 1700000000000);
+  const wrapped = parseExternalResources(
+    '{"defines":[{"key":"def","path":"https://x/remote.conf","ready":true,"updatedAt":1781776850.1813831}]}',
+  );
+  assert.equal(wrapped[0]!.url, "https://x/remote.conf");
 });
 
 test("buildCommandLine for temp-rule and external-resource", () => {
@@ -133,4 +145,10 @@ test("parseActive + aggregateTraffic", () => {
   assert.equal(t.connections, 2);
   assert.equal(t.downloadTotal, 3000);
   assert.equal(t.uploadTotal, 600);
+  const surge = parseActive(
+    '{"requests":[{"id":509447,"remoteHost":"kws2.web.telegram.org:443","policyName":"asia-warp","inBytes":60076,"outBytes":82746}]}',
+  );
+  assert.equal(surge[0]!.id, "509447");
+  assert.equal(surge[0]!.remote, "kws2.web.telegram.org:443");
+  assert.equal(surge[0]!.policy, "asia-warp");
 });

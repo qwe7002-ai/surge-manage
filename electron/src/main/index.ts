@@ -17,6 +17,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: "#0a0a0a",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
@@ -40,6 +41,7 @@ function createWindow(): void {
 }
 
 function send(channel: string, payload: unknown): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow?.webContents.send(channel, payload);
 }
 
@@ -83,8 +85,10 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  connection.disconnect();
+  void connection.disconnect().catch(() => undefined);
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => connection.disconnect());
+app.on("before-quit", () => {
+  void connection.disconnect().catch(() => undefined);
+});

@@ -34,7 +34,7 @@ export interface HostConfig {
 
 /** Per-host customisation of the surge command catalog. */
 export interface SurgeProfile {
-  /** Binary name or absolute path. Default: "surge". */
+  /** Absolute path to the Surge CLI binary. */
   bin: string;
   /**
    * Optional argv overrides keyed by {@link SurgeAction}. When present, replaces
@@ -42,6 +42,9 @@ export interface SurgeProfile {
    */
   argv?: Partial<Record<SurgeAction, string[]>>;
 }
+
+export const DEFAULT_SURGE_BIN =
+  "/Applications/Surge.app/Contents/Applications/surge-cli";
 
 /**
  * Actions map 1:1 onto real Surge CLI commands (see the CLI reference). Query
@@ -86,7 +89,7 @@ export type SurgeAction =
   | "diagnostics" // diagnostics
   | "kill" // kill <connection-id>
   | "setLogLevel" // set-log-level <level>
-  | "setEnvironment"; // set <key-path>=<value> (one "k=v" token per arg)
+  | "setEnvironment"; // set <key-path> <value>
 
 export type ConnectionPhase =
   | "disconnected"
