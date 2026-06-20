@@ -202,39 +202,59 @@ export function RuleEditor() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Drag the handle to reorder. Right-click a rule to edit, enable/disable, or delete it.
+        Drag a row to reorder. Right-click a rule to edit, enable/disable, or delete it.
         Disabled rules and comments are kept as <code>#</code> lines and survive a save.
       </p>
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-auto">
-        {loading && entries.length === 0 && (
-          <p className="px-1 py-8 text-center text-sm text-muted-foreground">Loading…</p>
-        )}
-        {!loading && entries.length === 0 && (
-          <p className="px-1 py-8 text-center text-sm text-muted-foreground">
-            No rules. Click “Add rule” to create one.
-          </p>
-        )}
-        {entries.map((e, i) => (
-          <RuleRow
-            key={i}
-            entry={e}
-            dragging={dragIndex === i}
-            onDragStart={() => setDragIndex(i)}
-            onDragEnd={() => setDragIndex(null)}
-            onDropOver={() => {
-              if (dragIndex !== null) move(dragIndex, i);
-              setDragIndex(i);
-            }}
-            onContextMenu={(ev) => {
-              ev.preventDefault();
-              setMenu({ index: i, x: ev.clientX, y: ev.clientY });
-            }}
-            onToggle={() => patch(i, { enabled: !e.enabled })}
-            onEdit={() => setEditor({ index: i, text: e.text })}
-          />
-        ))}
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-muted/80 text-xs text-muted-foreground backdrop-blur">
+            <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:text-left [&>th]:font-medium">
+              <th className="w-7" />
+              <th className="w-10 text-center">On</th>
+              <th className="w-44">Type</th>
+              <th>Value</th>
+              <th className="w-40">Policy</th>
+              <th className="w-40">Options</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && entries.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-2 py-8 text-center text-sm text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!loading && entries.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-2 py-8 text-center text-sm text-muted-foreground">
+                  No rules. Click “Add rule” to create one.
+                </td>
+              </tr>
+            )}
+            {entries.map((e, i) => (
+              <RuleRow
+                key={i}
+                entry={e}
+                dragging={dragIndex === i}
+                onDragStart={() => setDragIndex(i)}
+                onDragEnd={() => setDragIndex(null)}
+                onDropOver={() => {
+                  if (dragIndex !== null) move(dragIndex, i);
+                  setDragIndex(i);
+                }}
+                onContextMenu={(ev) => {
+                  ev.preventDefault();
+                  setMenu({ index: i, x: ev.clientX, y: ev.clientY });
+                }}
+                onToggle={() => patch(i, { enabled: !e.enabled })}
+                onEdit={() => setEditor({ index: i, text: e.text })}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {menu && (
@@ -297,84 +317,101 @@ function RuleRow({
       onDropOver();
     },
   };
-  const handle = (
-    <span
-      className="shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-      title="Drag to reorder"
-    >
-      <GripVertical className="h-3.5 w-3.5" />
-    </span>
+  const handleCell = (
+    <td className="px-1 text-center align-middle">
+      <span
+        className="inline-flex cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+        title="Drag to reorder"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </span>
+    </td>
   );
-  const dragClass = dragging ? "opacity-40" : "";
+  const rowClass = `border-t [&>td]:px-2 [&>td]:py-1.5 [&>td]:align-middle ${
+    dragging ? "opacity-40" : "hover:bg-accent"
+  }`;
 
   if (entry.comment) {
     return (
-      <div
-        {...dragProps}
-        className={`flex items-center gap-2 rounded px-2 py-1 text-xs text-muted-foreground ${dragClass}`}
-        onContextMenu={onContextMenu}
-      >
-        {handle}
-        <span className="font-mono">#</span>
-        <span className="truncate italic">{entry.text}</span>
-      </div>
+      <tr {...dragProps} className={rowClass} onContextMenu={onContextMenu} onDoubleClick={onEdit}>
+        {handleCell}
+        <td className="text-center font-mono text-xs text-muted-foreground">#</td>
+        <td colSpan={4} className="truncate text-xs italic text-muted-foreground">
+          {entry.text}
+        </td>
+      </tr>
     );
   }
 
   const rule = parseRuleLine(entry.text);
   const logical = rule ? undefined : parseLogicalRule(entry.text);
   const dim = entry.enabled ? "" : "opacity-50";
+
   return (
-    <div
+    <tr
       {...dragProps}
-      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors hover:bg-accent ${dragClass}`}
+      className={rowClass}
       onContextMenu={onContextMenu}
       onDoubleClick={onEdit}
       title="Drag to reorder · right-click for options"
     >
-      {handle}
-      <Switch
-        checked={entry.enabled}
-        onCheckedChange={onToggle}
-        title={entry.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
-      />
+      {handleCell}
+      <td className="text-center">
+        <Switch
+          checked={entry.enabled}
+          onCheckedChange={onToggle}
+          title={entry.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+        />
+      </td>
       {rule ? (
-        <div className={`flex min-w-0 flex-1 items-center gap-2 text-sm ${dim}`}>
-          <Badge variant="outline" className="shrink-0 text-[10px] font-medium">
-            {rule.type}
-          </Badge>
-          {rule.value && (
-            <span className="truncate font-mono text-xs" title={rule.value}>
-              {rule.value}
-            </span>
-          )}
-          <span className="text-muted-foreground">→</span>
-          <Badge variant="secondary" className="shrink-0 text-[10px]">
-            {rule.policy}
-          </Badge>
-          {rule.options.map((o) => (
-            <Badge key={o} variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
-              {o}
+        <>
+          <td className={dim}>
+            <Badge variant="outline" className="text-[10px] font-medium">
+              {rule.type}
             </Badge>
-          ))}
-        </div>
+          </td>
+          <td className={`max-w-0 truncate font-mono text-xs ${dim}`} title={rule.value}>
+            {rule.value || "—"}
+          </td>
+          <td className={dim}>
+            <Badge variant="secondary" className="text-[10px]">
+              {rule.policy}
+            </Badge>
+          </td>
+          <td className={dim}>
+            <div className="flex flex-wrap gap-1">
+              {rule.options.map((o) => (
+                <Badge key={o} variant="outline" className="text-[10px] text-muted-foreground">
+                  {o}
+                </Badge>
+              ))}
+            </div>
+          </td>
+        </>
       ) : logical ? (
-        <div className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm ${dim}`}>
-          <Badge className="shrink-0 text-[10px] font-medium">{logical.operator}</Badge>
-          <span className="truncate font-mono text-xs" title={entry.text}>
+        <>
+          <td className={dim}>
+            <Badge className="text-[10px] font-medium">{logical.operator}</Badge>
+          </td>
+          <td
+            className={`max-w-0 truncate font-mono text-xs ${dim}`}
+            title={logical.conditions.map(describeCondition).join(" · ")}
+          >
             {logical.conditions.map(describeCondition).join(" · ")}
-          </span>
-          <span className="text-muted-foreground">→</span>
-          <Badge variant="secondary" className="shrink-0 text-[10px]">
-            {logical.policy}
-          </Badge>
-        </div>
+          </td>
+          <td className={dim}>
+            <Badge variant="secondary" className="text-[10px]">
+              {logical.policy}
+            </Badge>
+          </td>
+          <td />
+        </>
       ) : (
-        <code className={`min-w-0 flex-1 truncate text-xs ${dim}`} title={entry.text}>
+        <td colSpan={4} className={`max-w-0 truncate font-mono text-xs ${dim}`} title={entry.text}>
           {entry.text}
-        </code>
+        </td>
       )}
-    </div>
+    </tr>
   );
 }
 
