@@ -270,6 +270,7 @@ test("parseExternalResources reads key/ready/updatedAt", () => {
     '{"defines":[{"key":"def","path":"https://x/remote.conf","ready":true,"updatedAt":1781776850.1813831}]}',
   );
   assert.equal(wrapped[0]!.url, "https://x/remote.conf");
+  assert.equal(wrapped[0]!.updatedAt, 1781776850181);
 });
 
 test("buildCommandLine for temp-rule and external-resource", () => {

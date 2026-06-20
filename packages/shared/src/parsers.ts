@@ -86,6 +86,14 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+function epochMs(v: unknown): number | undefined {
+  const n = num(v) ?? (typeof v === "string" ? Number(v) : undefined);
+  if (n == null || !Number.isFinite(n)) return undefined;
+  // Surge reports external-resource updatedAt as Unix seconds with fractional
+  // subsecond precision; older callers may already provide milliseconds.
+  return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
+}
+
 /** Flatten `surge --raw environment` JSON into displayable key/value pairs. */
 export function parseEnvironment(stdout: string): Environment {
   const json = tryJson(stdout);
@@ -326,7 +334,7 @@ export function parseExternalResources(stdout: string): ExternalResource[] {
       key: str(r.key) ?? str(r.hash) ?? str(r.url) ?? "",
       url: str(r.url) ?? str(r.path),
       ready: typeof r.ready === "boolean" ? r.ready : undefined,
-      updatedAt: num(r.updatedAt) ?? num(r.updated),
+      updatedAt: epochMs(r.updatedAt) ?? epochMs(r.updated),
     }))
     .filter((r) => r.key);
 }

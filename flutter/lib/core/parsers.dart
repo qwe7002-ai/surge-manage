@@ -19,6 +19,12 @@ dynamic _tryJson(String text) {
 num? _num(dynamic v) => v is num ? v : null;
 String? _str(dynamic v) => v is String ? v : null;
 
+int? _epochMs(dynamic v) {
+  final n = _num(v) ?? (v is String ? num.tryParse(v) : null);
+  if (n == null) return null;
+  return n < 1000000000000 ? (n * 1000).round() : n.round();
+}
+
 /// Surge may wrap payloads as {result, error, <payload>}. Unwrap by key.
 dynamic _unwrap(Map outer, String key) => outer.containsKey(key) ? outer[key] : outer;
 
@@ -251,13 +257,15 @@ List<ExternalResource> parseExternalResources(String stdout) {
       ? json
       : (json is Map && json['resources'] is List)
           ? json['resources'] as List
+          : (json is Map && json['defines'] is List)
+              ? json['defines'] as List
           : const [];
   return list.whereType<Map>().map((r) {
     return ExternalResource(
       key: _str(r['key']) ?? _str(r['hash']) ?? _str(r['url']) ?? '',
-      url: _str(r['url']),
+      url: _str(r['url']) ?? _str(r['path']),
       ready: r['ready'] is bool ? r['ready'] as bool : null,
-      updatedAt: _num(r['updatedAt'])?.toInt() ?? _num(r['updated'])?.toInt(),
+      updatedAt: _epochMs(r['updatedAt']) ?? _epochMs(r['updated']),
     );
   }).where((r) => r.key.isNotEmpty).toList();
 }
