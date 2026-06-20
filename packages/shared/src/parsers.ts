@@ -57,6 +57,21 @@ export function parseProfiles(stdout: string): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * Parse the output of the interface-listing command into sorted, de-duplicated
+ * interface names. Tolerant of both macOS `ifconfig -l` (space-separated on one
+ * line) and Linux `ls /sys/class/net` (one per line).
+ */
+export function parseInterfaces(stdout: string): string[] {
+  const names = new Set(
+    stdout
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 /** Surface a Surge `error` field from a --raw response, if any. */
 export function extractError(stdout: string): string | undefined {
   const rec = asRecord(tryJson(stdout));

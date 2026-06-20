@@ -77,6 +77,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.profileWrite, (_e, profile: string, content: string) =>
     connection.writeProfile(profile, content),
   );
+  ipcMain.handle(IPC.systemInterfaces, () => connection.listInterfaces());
 
   ipcMain.handle(IPC.logsStart, () => connection.startLogs());
   ipcMain.handle(IPC.logsStop, () => connection.stopLogs());

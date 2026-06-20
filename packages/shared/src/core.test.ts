@@ -22,6 +22,27 @@ import {
   setRuleEntries,
   setSectionEntries,
 } from "../dist/config-doc.js";
+import {
+  getProxyParam,
+  groupedProxyFields,
+  isRestrictedProtocol,
+  parseProxyLine,
+  protocolUsesServer,
+  proxyFieldsFor,
+  serializeProxyLine,
+  setProxyParam,
+} from "../dist/proxy.js";
+import { parseInterfaces } from "../dist/parsers.js";
+import {
+  LOGICAL_RULE_TYPES,
+  RULE_TYPES,
+  isLogicalRuleType,
+  parseLogicalRule,
+  parseRuleLine,
+  ruleTypeHasValue,
+  serializeLogicalRule,
+  serializeRuleLine,
+} from "../dist/rule.js";
 import type { SurgeProfile } from "../dist/types.js";
 
 const profile: SurgeProfile = { bin: "surge" };
@@ -302,4 +323,179 @@ test("parseActive reads Surge {requests:[...]} envelope with numeric ids", () =>
   assert.equal(conns[0]!.id, "42"); // numeric id coerced to string for `kill`
   assert.equal(conns[0]!.policy, "HK");
   assert.equal(conns[0]!.downloadBytes, 1000);
+});
+
+test("parseProxyLine splits server/port and key=value params", () => {
+  const c = parseProxyLine(
+    "asia-warp = ss, asia.reallsys.eu, 30000, encrypt-method=2022-blake3-aes-128-gcm, password=secret, udp-relay=true",
+  )!;
+  assert.equal(c.name, "asia-warp");
+  assert.equal(c.type, "ss");
+  assert.equal(c.server, "asia.reallsys.eu");
+  assert.equal(c.port, "30000");
+  assert.equal(getProxyParam(c, "encrypt-method"), "2022-blake3-aes-128-gcm");
+  assert.equal(getProxyParam(c, "udp-relay"), "true");
+  assert.deepEqual(c.extraPositional, []);
+});
+
+test("parseProxyLine keeps positional args for server-less protocols", () => {
+  const c = parseProxyLine("Local = direct")!;
+  assert.equal(c.type, "direct");
+  assert.equal(c.server, undefined);
+  assert.equal(protocolUsesServer("direct"), false);
+});
+
+test("serializeProxyLine round-trips a parsed line", () => {
+  const line =
+    "HK = trojan, hk.example.com, 443, password=p, sni=hk.example.com, skip-cert-verify=true";
+  const c = parseProxyLine(line)!;
+  assert.equal(serializeProxyLine(c), line);
+});
+
+test("setProxyParam updates, appends, and removes by case-insensitive key", () => {
+  let c = parseProxyLine("HK = ss, h, 1, password=a")!;
+  c = setProxyParam(c, "password", "b");
+  assert.equal(getProxyParam(c, "password"), "b");
+  c = setProxyParam(c, "udp-relay", "true");
+  assert.equal(getProxyParam(c, "udp-relay"), "true");
+  c = setProxyParam(c, "Password", ""); // empty removes (case-insensitive)
+  assert.equal(getProxyParam(c, "password"), undefined);
+  assert.equal(serializeProxyLine(c), "HK = ss, h, 1, udp-relay=true");
+});
+
+test("parseProxyLine returns undefined for malformed entries", () => {
+  assert.equal(parseProxyLine("no-equals-here"), undefined);
+  assert.equal(parseProxyLine("= ss, h, 1"), undefined);
+});
+
+test("proxyFieldsFor restricts direct to the bind-interface field", () => {
+  const direct = proxyFieldsFor("direct");
+  assert.deepEqual(
+    direct.map((f) => f.key),
+    ["interface"],
+  );
+  assert.equal(isRestrictedProtocol("direct"), true);
+  assert.equal(isRestrictedProtocol("ss"), false);
+});
+
+test("proxyFieldsFor returns protocol-specific fields before common ones", () => {
+  const ss = proxyFieldsFor("ss").map((f) => f.key);
+  // ss-specific keys lead, then the shared/common parameters.
+  assert.deepEqual(ss.slice(0, 5), [
+    "encrypt-method",
+    "password",
+    "obfs",
+    "obfs-host",
+    "obfs-uri",
+  ]);
+  assert.ok(ss.includes("test-url")); // common
+  assert.ok(ss.includes("ip-version")); // common
+  // ws-only protocols don't surface ss-only fields.
+  const vmess = proxyFieldsFor("vmess").map((f) => f.key);
+  assert.ok(vmess.includes("ws") && vmess.includes("vmess-aead"));
+  assert.ok(vmess.includes("encrypt-method")); // vmess uses encrypt-method
+  assert.ok(!vmess.includes("psk")); // psk is snell-only
+  // WireGuard references a section and takes no server/port.
+  assert.deepEqual(proxyFieldsFor("wireguard")[0]!.key, "section-name");
+  assert.equal(protocolUsesServer("wireguard"), false);
+  // Unknown protocols still get the common set.
+  assert.ok(proxyFieldsFor("mystery").some((f) => f.key === "test-url"));
+});
+
+test("block-quic defaults to Auto (absence) and underlying-proxy is a policy select", () => {
+  const fields = proxyFieldsFor("ss");
+  const blockQuic = fields.find((f) => f.key === "block-quic")!;
+  assert.equal(blockQuic.defaultValue, "auto");
+  // The Auto option carries the empty value so absence == auto.
+  assert.equal(blockQuic.options![0]!.value, "");
+  assert.equal(blockQuic.options![0]!.label, "Auto");
+  const underlying = fields.find((f) => f.key === "underlying-proxy")!;
+  assert.equal(underlying.kind, "policy");
+});
+
+test("parseInterfaces handles macOS ifconfig -l and Linux /sys/class/net", () => {
+  assert.deepEqual(parseInterfaces("lo0 en0 en1 utun0"), ["en0", "en1", "lo0", "utun0"]);
+  assert.deepEqual(parseInterfaces("eth0\nlo\nwg0\n"), ["eth0", "lo", "wg0"]);
+  assert.deepEqual(parseInterfaces("  "), []);
+});
+
+test("groupedProxyFields buckets fields into ordered sections", () => {
+  const groups = groupedProxyFields("ss");
+  const ids = groups.map((g) => g.id);
+  // Order follows PROXY_FIELD_GROUPS; ss has auth, obfs, chain, testing, egress, options.
+  assert.deepEqual(ids, ["auth", "obfs", "chain", "testing", "egress", "options"]);
+  const egress = groups.find((g) => g.id === "egress")!;
+  assert.ok(egress.fields.some((f) => f.key === "interface"));
+  // direct collapses to a single Egress group with just the interface field.
+  const direct = groupedProxyFields("direct");
+  assert.deepEqual(direct.map((g) => g.id), ["egress"]);
+  assert.deepEqual(direct[0].fields.map((f) => f.key), ["interface"]);
+});
+
+test("parseRuleLine splits matcher rules and FINAL, round-trips", () => {
+  const r = parseRuleLine("IP-CIDR,10.0.0.0/8,DIRECT,no-resolve")!;
+  assert.equal(r.type, "IP-CIDR");
+  assert.equal(r.value, "10.0.0.0/8");
+  assert.equal(r.policy, "DIRECT");
+  assert.deepEqual(r.options, ["no-resolve"]);
+  assert.equal(serializeRuleLine(r), "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve");
+
+  const fin = parseRuleLine("FINAL,Proxy,dns-failed")!;
+  assert.equal(fin.type, "FINAL");
+  assert.equal(fin.value, "");
+  assert.equal(fin.policy, "Proxy");
+  assert.equal(serializeRuleLine(fin), "FINAL,Proxy,dns-failed");
+});
+
+test("parseRuleLine declines logical and malformed rules (raw fallback)", () => {
+  assert.equal(parseRuleLine("AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy"), undefined);
+  assert.equal(isLogicalRuleType("OR"), true);
+  assert.equal(parseRuleLine("DOMAIN-SUFFIX,example.com"), undefined); // no policy
+  assert.equal(ruleTypeHasValue("FINAL"), false);
+  assert.equal(ruleTypeHasValue("DOMAIN"), true);
+});
+
+test("RULE_TYPES excludes logical combinators", () => {
+  assert.ok(!RULE_TYPES.includes("AND"));
+  assert.ok(!RULE_TYPES.includes("OR"));
+  assert.ok(!RULE_TYPES.includes("NOT"));
+  assert.deepEqual([...LOGICAL_RULE_TYPES], ["AND", "OR", "NOT"]);
+});
+
+test("parseLogicalRule reads operator, conditions, policy and round-trips", () => {
+  const r = parseLogicalRule("AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy")!;
+  assert.equal(r.operator, "AND");
+  assert.deepEqual(r.conditions, [
+    { kind: "match", type: "DOMAIN", value: "a.com" },
+    { kind: "match", type: "DEST-PORT", value: "80" },
+  ]);
+  assert.equal(r.policy, "Proxy");
+  assert.equal(serializeLogicalRule(r), "AND,((DOMAIN,a.com),(DEST-PORT,80)),Proxy");
+
+  const not = parseLogicalRule("NOT,((DOMAIN-SUFFIX,cn)),DIRECT")!;
+  assert.equal(not.operator, "NOT");
+  assert.equal(not.conditions.length, 1);
+  assert.equal(serializeLogicalRule(not), "NOT,((DOMAIN-SUFFIX,cn)),DIRECT");
+
+  // Non-logical and malformed lines decline.
+  assert.equal(parseLogicalRule("DOMAIN,a.com,Proxy"), undefined);
+  assert.equal(parseLogicalRule("AND,((DOMAIN,a.com))"), undefined); // no policy
+});
+
+test("parseLogicalRule handles nested logical groups and round-trips", () => {
+  const line = "AND,((OR,((DOMAIN,a.com),(DOMAIN,b.com))),(DEST-PORT,80)),Proxy";
+  const r = parseLogicalRule(line)!;
+  assert.equal(r.operator, "AND");
+  assert.equal(r.conditions.length, 2);
+  const group = r.conditions[0]!;
+  assert.equal(group.kind, "group");
+  if (group.kind === "group") {
+    assert.equal(group.operator, "OR");
+    assert.deepEqual(group.conditions, [
+      { kind: "match", type: "DOMAIN", value: "a.com" },
+      { kind: "match", type: "DOMAIN", value: "b.com" },
+    ]);
+  }
+  assert.deepEqual(r.conditions[1], { kind: "match", type: "DEST-PORT", value: "80" });
+  assert.equal(serializeLogicalRule(r), line);
 });

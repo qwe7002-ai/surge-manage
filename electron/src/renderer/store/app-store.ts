@@ -48,6 +48,8 @@ interface AppState {
   traffic: Traffic | null;
   connections: ActiveConnection[];
   profiles: string[];
+  /** Network interface names on the connected host (for interface binding). */
+  interfaces: string[];
   /** Profile whose config file structured editors read/write. */
   activeProfile: string | null;
   logs: LogLine[];
@@ -84,6 +86,8 @@ interface AppState {
   setToggle: (key: string, on: boolean) => Promise<void>;
   killConnection: (id: string) => Promise<void>;
   refreshProfiles: () => Promise<void>;
+  /** Read the connected host's network interface names. */
+  refreshInterfaces: () => Promise<void>;
   switchProfile: (name: string) => Promise<void>;
   setActiveProfile: (name: string) => void;
   /** Read a config section's entry lines from a profile file. */
@@ -98,6 +102,8 @@ interface AppState {
   readProfileRules: (profile: string) => Promise<RuleEntry[]>;
   /** Replace the [Rule] section from rule entries (disabled → `#`), reload. */
   writeProfileRules: (profile: string, entries: RuleEntry[]) => Promise<void>;
+  /** Overwrite a profile's entire config file (validated), then reload. */
+  writeProfileRaw: (profile: string, content: string) => Promise<void>;
   testPolicy: (name: string) => Promise<void>;
   testAllPolicies: () => Promise<void>;
   testGroup: (name: string) => Promise<void>;
@@ -122,6 +128,7 @@ export const useApp = create<AppState>((set, get) => ({
   traffic: null,
   connections: [],
   profiles: [],
+  interfaces: [],
   activeProfile: null,
   logs: [],
   logStreaming: false,
@@ -152,6 +159,7 @@ export const useApp = create<AppState>((set, get) => ({
           traffic: null,
           connections: [],
           profiles: [],
+          interfaces: [],
           logStreaming: false,
         });
       }
@@ -357,6 +365,14 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  async refreshInterfaces() {
+    try {
+      set({ interfaces: await window.surge.system.listInterfaces() });
+    } catch {
+      set({ interfaces: [] });
+    }
+  },
+
   async switchProfile(name) {
     await guarded(set, async () => {
       await window.surge.surge.run("switchProfile", [name]);
@@ -399,6 +415,15 @@ export const useApp = create<AppState>((set, get) => ({
       await window.surge.profiles.write(profile, serializeConfigDocument(next));
       await window.surge.surge.run("reload");
       set({ lastInfo: `Saved Rule to ${profile}.conf and reloaded` });
+    });
+  },
+
+  async writeProfileRaw(profile, content) {
+    await guarded(set, async () => {
+      // profiles.write validates with `surge --check` and keeps a .bak backup.
+      await window.surge.profiles.write(profile, content);
+      await window.surge.surge.run("reload");
+      set({ lastInfo: `Saved ${profile}.conf and reloaded` });
     });
   },
 

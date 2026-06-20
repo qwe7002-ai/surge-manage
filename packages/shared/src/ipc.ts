@@ -27,6 +27,7 @@ export const IPC = {
   profilesList: "profiles:list",
   profileRead: "profile:read",
   profileWrite: "profile:write",
+  systemInterfaces: "system:interfaces",
   logsStart: "logs:start",
   logsStop: "logs:stop",
   logLine: "log:line", // main → renderer event (parsed streaming surge logs)
@@ -55,6 +56,10 @@ export interface SurgeBridge {
     read(profile: string): Promise<string>;
     /** Validate and atomically overwrite a named profile config file over SFTP. */
     write(profile: string, content: string): Promise<void>;
+  };
+  system: {
+    /** Network interface names on the connected host (for interface binding). */
+    listInterfaces(): Promise<string[]>;
   };
   logs: {
     /** Begin streaming parsed surge log lines (e.g. when the Logs tab opens). */
